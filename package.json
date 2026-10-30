@@ -1,0 +1,13 @@
+{
+  "name": "evenday",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Evenday: a calm life organizer (browser prototype).",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "test": "node tests/e2e.mjs",
+    "build:artifact": "node scripts/build-artifact.mjs"
+  },
+  "engines": { "node": ">=18" }
+}
