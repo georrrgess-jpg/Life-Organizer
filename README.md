@@ -2,9 +2,10 @@
 
 A calm life organizer: see what's due today, what's coming up, and reach the apps you use most. This is a **browser prototype**, not an App Store build.
 
-- **Today**: date, schedule, upcoming events, overdue and due tasks, favorite shortcuts, quick add.
+- **Quick add (type or speak)**: write or dictate something like “Dentist Friday 3pm, buy milk, essay due Monday !” and Evenday turns it into tasks and events. You see a preview first and can switch an item between task and event, or drop it. The parsing runs entirely on the device, so it works offline and needs no account or API key.
+- **Today**: date, an “Up next” card, a schedule with a Now marker, overdue and due tasks with progress and “Move to today”, favorite shortcuts.
 - **Calendar**: month view, agenda for the selected day, events with times or all-day, locations, notes and category colors.
-- **Tasks**: Today, Upcoming and Done views, due dates, priority, categories, Undo after completing or deleting.
+- **Tasks**: Today, Upcoming and Done views, due dates, priority, categories. On a phone, swipe right to complete or left to delete; every change can be undone.
 - **Apps**: a grid of website shortcuts with optional app links. Reorder with arrow buttons, star a shortcut to show it on Today.
 - **Settings**: light/dark/system theme, week start, export and import a backup, sample data, erase all data.
 
@@ -30,9 +31,13 @@ Any static server works too, for example `python3 -m http.server 5173`. Opening 
 npm test
 ```
 
-Runs 20 end-to-end checks in headless Chromium: tasks, events (including a DST-change date), shortcuts, persistence, export/import, theme, keyboard, overflow at 320–1280px, and reset. It needs Playwright with Chromium (`npm i -D playwright && npx playwright install chromium` if you don't have it).
+Runs 21 parser unit checks, then 26 end-to-end checks in headless Chromium: Quick add and a simulated voice session, swipe gestures, tasks, events (including a DST-change date), shortcuts, persistence, export/import, theme, keyboard, overflow at 320–1280px, and reset. It needs Playwright with Chromium (`npm i -D playwright && npx playwright install chromium` if you don't have it).
 
-Keyboard: press `n` to add, `Esc` to close a sheet, arrow keys to move between calendar days and task tabs.
+Keyboard: press `n` for Quick add, `Esc` to close a sheet, arrow keys to move between calendar days and task tabs.
+
+## Voice input
+
+The mic buttons use the browser's built-in speech recognition: Apple's dictation in Safari on iPhone (Siri & Dictation must be on), Google's service in Chrome. Evenday never handles audio itself. Where the browser doesn't offer speech recognition, the mic button is hidden and the keyboard's own dictation key still works. The embedded claude.ai preview blocks microphone access, so test voice from `npm start` on your phone or computer.
 
 ## Project layout
 
@@ -43,11 +48,15 @@ js/app.js             shell, hash routing, actions
 js/store.js           data model, validation, persistence, import/export, sample data
 js/dates.js           local date helpers (dates stored as YYYY-MM-DD, never UTC)
 js/forms.js           task, event and shortcut editors
+js/capture.js         Quick add sheet (type or speak, preview, add)
+js/parse.js           on-device natural-language parser for Quick add
+js/voice.js           speech recognition wrapper
 js/components.js      shared rows, tiles and empty states
 js/views/*.js         Today, Calendar, Tasks, Apps, Settings
 sw.js, manifest       offline support and install metadata
 scripts/serve.mjs     zero-dependency dev server
 scripts/build-artifact.mjs  single-file build for hosted previews (uses esbuild via npx)
+tests/parse.test.mjs  parser unit checks
 tests/e2e.mjs         end-to-end checks
 ```
 
@@ -57,6 +66,8 @@ tests/e2e.mjs         end-to-end checks
 - Events are single-day. There are no repeating events, overnight events (ending after midnight) or reminders/notifications yet.
 - App links (like `spotify:`) depend on the device. A web page can't tell whether an app is installed or whether the link opened it. Evenday tries the app and offers the website if the page is still in view after about a second. App links haven't been tested on real iOS or Android devices.
 - Websites open in a new tab, so the destination page decides whether it opens in its native app.
+- Quick add understands English phrasing only, and it uses pattern matching rather than AI, so unusual wording may need a quick fix in the preview or afterward.
+- Voice depends on the browser and hasn't been tested on a real iPhone yet.
 
 ## Path to the App Store
 

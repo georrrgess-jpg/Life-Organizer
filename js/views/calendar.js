@@ -1,5 +1,5 @@
 import { addDays, formatDate, monthGrid, parseKey, todayKey, weekdayLabels } from '../dates.js';
-import { emptyState, eventRow, sortEvents, taskRow } from '../components.js';
+import { emptyState, eventRow, pageHeader, sortEvents, taskRow } from '../components.js';
 import { esc } from '../ui.js';
 import { icon } from '../icons.js';
 
@@ -28,10 +28,7 @@ export function renderCalendar(state, ui) {
   }).join('');
 
   return `
-  <header class="page-head">
-    <div><h1>Calendar</h1></div>
-    <button type="button" class="btn btn-secondary btn-sm" data-action="cal-today" ${sel === today && ui.calMonth.year === new Date().getFullYear() && ui.calMonth.month === new Date().getMonth() ? 'disabled' : ''}>Today</button>
-  </header>
+  ${pageHeader({ title: 'Calendar', actions: `<button type="button" class="nav-btn nav-primary" data-action="cal-today" ${sel === today ? 'disabled' : ''}>Today</button>` })}
   <div class="cal-layout">
     <section class="card cal" aria-label="Month">
       <div class="cal-nav">
@@ -40,7 +37,7 @@ export function renderCalendar(state, ui) {
         <button type="button" class="btn-icon" data-action="cal-next" data-focus="cal-next" aria-label="Next month">${icon('chevronRight')}</button>
       </div>
       <div class="weekdays" aria-hidden="true">${weekdayLabels(state.prefs.weekStart).map((w) => `<span title="${w.long}">${w.short}</span>`).join('')}</div>
-      <div class="days" data-keynav="calendar" aria-label="Days. Use arrow keys to move between days.">${cells}</div>
+      <div class="days" data-keynav="calendar" data-swipe="month" aria-label="Days. Use arrow keys to move between days, or swipe to change month.">${cells}</div>
     </section>
     <section class="card section agenda" aria-labelledby="h-agenda">
       <div class="section-head">

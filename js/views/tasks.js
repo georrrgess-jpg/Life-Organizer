@@ -1,5 +1,5 @@
 import { relativeDay, todayKey } from '../dates.js';
-import { emptyState, taskRow } from '../components.js';
+import { emptyState, pageHeader, taskRow } from '../components.js';
 import { esc } from '../ui.js';
 import { icon } from '../icons.js';
 
@@ -46,9 +46,7 @@ export function renderTasks(state, ui) {
   }
 
   return `
-  <header class="page-head">
-    <div><h1>Tasks</h1></div>
-  </header>
+  ${pageHeader({ title: 'Tasks' })}
   <div class="segmented tabs" role="tablist" aria-label="Task views">
     ${tabs.map(([k, label]) => `<button type="button" role="tab" class="seg-btn" data-action="task-tab" data-tab="${k}" data-focus="tab-${k}"
       aria-selected="${tab === k}" tabindex="${tab === k ? 0 : -1}">${label}${counts[k] ? `<span class="count">${counts[k]}</span>` : ''}</button>`).join('')}
@@ -57,9 +55,11 @@ export function renderTasks(state, ui) {
     ${tab !== 'done' ? `<form class="quick-task" data-form="quick-task" data-due="${tab === 'today' ? today : ''}">
       <label class="sr-only" for="quick-tasks">Add a task</label>
       <input id="quick-tasks" name="title" type="text" maxlength="200" autocomplete="off" data-focus="quick-tasks"
-        placeholder="${tab === 'today' ? 'Add a task for today' : 'Add a task with no due date'}">
+        placeholder="${tab === 'today' ? 'Add a task for today' : 'Add a task'}">
+      <button type="button" class="btn-icon" data-action="quick-voice" aria-label="Add by voice">${icon('mic')}</button>
       <button type="submit" class="btn-icon btn-accent" aria-label="Add task">${icon('plus')}</button>
-    </form>` : ''}
+    </form>
+    <p class="hint quick-hint">Tip: “Call mom Friday !” sets the date and priority for you.</p>` : ''}
     ${body}
   </section>`;
 }

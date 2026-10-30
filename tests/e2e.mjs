@@ -21,12 +21,37 @@ async function step(name, fn) {
 
 // New York timezone so the DST change on 2026-11-01 is exercised.
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'America/New_York' });
+// Stand-in speech engine so the voice flow can run headless.
+await ctx.addInitScript(() => {
+  const Fake = class {
+    start() {
+      setTimeout(() => {
+        this.onresult?.({ results: [{ 0: { transcript: 'Lunch with Sam tomorrow at noon' }, isFinal: true, length: 1 }] });
+        this.onend?.();
+      }, 50);
+    }
+    stop() { this.onend?.(); }
+  };
+  for (const name of ['SpeechRecognition', 'webkitSpeechRecognition']) Object.defineProperty(window, name, { configurable: true, writable: true, value: Fake });
+});
 const page = await ctx.newPage();
+page.setDefaultTimeout(8000);
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 const state = () => page.evaluate(() => JSON.parse(localStorage.getItem('evenday:data:v1')));
 const go = async (route) => { await page.goto(BASE + '#' + route); await page.waitForSelector('.page'); };
-const today = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+const [today, tomorrow] = await page.evaluate(() => [0, 1].map((n) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }));
+async function swipe(selector, dx) {
+  await page.evaluate(([sel, dist]) => {
+    const el = document.querySelector(sel);
+    const r = el.getBoundingClientRect();
+    const o = { pointerType: 'touch', pointerId: 7, bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
+    el.dispatchEvent(new PointerEvent('pointerdown', o));
+    for (let i = 1; i <= 6; i++) el.dispatchEvent(new PointerEvent('pointermove', { ...o, clientX: o.clientX + (dist * i) / 6 }));
+    el.dispatchEvent(new PointerEvent('pointerup', { ...o, clientX: o.clientX + dist }));
+  }, [selector, dx]);
+}
+const openNewEvent = async () => { await page.click('.nav-add'); await page.click('dialog [data-manual="event"]'); };
 
 await go('today');
 
@@ -35,9 +60,10 @@ await step('First run shows example shortcuts and empty states', async () => {
   await page.getByText('Nothing due today').first().waitFor();
 });
 
-await step('Quick-add task from Today updates the dashboard', async () => {
-  await page.fill('#quick-today', 'Buy groceries');
-  await page.press('#quick-today', 'Enter');
+await step('Quick add from Today updates the dashboard', async () => {
+  await page.click('.capture-open');
+  await page.fill('#capture-text', 'Buy groceries');
+  await page.click('dialog .nav-primary');
   await page.locator('.task-row', { hasText: 'Buy groceries' }).waitFor();
   assert.match(await page.textContent('.summary'), /1 task due/);
 });
@@ -45,8 +71,8 @@ await step('Quick-add task from Today updates the dashboard', async () => {
 await step('Edit task (title, priority, category)', async () => {
   await page.click('.task-main:has-text("Buy groceries")');
   await page.fill('#task-title', 'Buy groceries and milk');
-  await page.check('input[name="priority"][value="high"]', { force: true });
-  await page.check('input[name="category"][value="personal"]', { force: true });
+  await page.click('label.seg:has(input[name="priority"][value="high"])');
+  await page.click('label.chip:has(input[name="category"][value="personal"])');
   await page.click('dialog button[type="submit"]');
   await page.locator('.task-row', { hasText: 'Buy groceries and milk' }).locator('.prio-high').waitFor();
   const t = (await state()).tasks[0];
@@ -69,7 +95,7 @@ await step('Complete task, then reopen it from Done', async () => {
 
 await step('Event form rejects an end time before the start time', async () => {
   await go('calendar');
-  await page.click('.fab');
+  await openNewEvent();
   await page.fill('#ev-title', 'Bad times');
   await page.fill('#ev-start', '10:00');
   await page.fill('#ev-end', '09:00');
@@ -81,14 +107,14 @@ await step('Event form rejects an end time before the start time', async () => {
 });
 
 await step('Create timed and all-day events on the correct dates (incl. DST day)', async () => {
-  await page.click('.fab');
+  await openNewEvent();
   await page.fill('#ev-title', 'Piano lesson');
   await page.fill('#ev-date', '2026-11-15');
   await page.fill('#ev-start', '16:00');
   await page.fill('#ev-end', '17:00');
   await page.fill('#ev-location', 'Music school');
   await page.click('dialog button[type="submit"]');
-  await page.click('.fab');
+  await openNewEvent();
   await page.fill('#ev-title', 'Daylight saving ends');
   await page.fill('#ev-date', '2026-11-01');
   await page.check('#ev-allday');
@@ -129,7 +155,7 @@ await step('Month navigation and Today button', async () => {
 });
 
 await step('Today dashboard shows a new event for today', async () => {
-  await page.click('.fab');
+  await openNewEvent();
   await page.fill('#ev-title', 'Call with Alex');
   await page.check('#ev-allday');
   await page.click('dialog button[type="submit"]');
@@ -163,7 +189,69 @@ await step('Add shortcut (rejects unsafe link), reorder, favorite, open', async 
   await page.locator('.fav', { hasText: 'Class portal' }).waitFor();
 });
 
+await step('Generate: typed text becomes tasks and events, with type switch and remove', async () => {
+  await go('today');
+  await page.click('.nav-add');
+  await page.fill('#capture-text', 'Dentist tomorrow at 3pm, pick up dry cleaning !, water plants');
+  await page.locator('dialog .draft').nth(2).waitFor();
+  await page.click('[data-kind="pick up dry cleaning !"]');
+  await page.click('[data-remove="water plants"]');
+  assert.equal((await page.textContent('dialog .nav-primary')).trim(), 'Add 2');
+  await page.click('dialog .nav-primary');
+  await page.waitForSelector('dialog', { state: 'detached' });
+  const s = await state();
+  const dentist = s.events.find((e) => e.title === 'Dentist');
+  assert.equal(dentist.date, tomorrow);
+  assert.equal(dentist.start, '15:00');
+  const dc = s.events.find((e) => e.title === 'Pick up dry cleaning');
+  assert.ok(dc && dc.allDay && dc.date === today, 'switched item became an all-day event today');
+  assert.ok(!s.tasks.some((t) => /water/i.test(t.title)), 'removed draft was not added');
+});
+
+await step('Voice: dictation fills Quick add (simulated speech engine)', async () => {
+  await page.click('.capture-mic');
+  await page.locator('dialog .draft', { hasText: 'Lunch with Sam' }).waitFor();
+  await page.click('dialog .nav-primary');
+  await page.waitForSelector('dialog', { state: 'detached' });
+  const ev = (await state()).events.find((e) => e.title === 'Lunch with Sam');
+  assert.equal(ev.date, tomorrow);
+  assert.equal(ev.start, '12:00');
+});
+
+await step('Inline task field understands dates and priority', async () => {
+  await go('tasks');
+  await page.fill('#quick-tasks', 'Call grandma tomorrow !');
+  await page.press('#quick-tasks', 'Enter');
+  await page.waitForTimeout(100);
+  const t = (await state()).tasks.find((x) => x.title === 'Call grandma');
+  assert.equal(t.due, tomorrow);
+  assert.equal(t.priority, 'high');
+});
+
+await step('Swipe right completes and swipe left deletes a task (touch), both undoable', async () => {
+  const id = (await state()).tasks.find((x) => x.title === 'Buy groceries and milk').id;
+  await swipe(`.task-row[data-task="${id}"] .task-main`, 120);
+  await page.waitForTimeout(700);
+  assert.equal((await state()).tasks.find((x) => x.id === id).done, true);
+  await page.click('.toast-action');
+  assert.equal((await state()).tasks.find((x) => x.id === id).done, false);
+  await swipe(`.task-row[data-task="${id}"] .task-main`, -120);
+  await page.waitForTimeout(100);
+  assert.equal((await state()).tasks.some((x) => x.id === id), false);
+  await page.click('.toast-action');
+  assert.equal((await state()).tasks.some((x) => x.id === id), true);
+});
+
+await step('Settings opens from the top bar and Back returns to the same tab', async () => {
+  await go('tasks');
+  await page.click('.topbar a[href="#preferences"]');
+  await page.waitForSelector('.page-preferences');
+  await page.click('[data-action="go-back"]');
+  await page.waitForSelector('.page-tasks');
+});
+
 await step('Data persists after reload', async () => {
+  await go('today');
   await page.reload();
   await page.waitForSelector('.page');
   await page.locator('.task-row', { hasText: 'Buy groceries and milk' }).waitFor();
@@ -177,7 +265,7 @@ await step('Export produces a valid backup', async () => {
   backup = await page.inputValue('#export-text');
   const parsed = JSON.parse(backup);
   assert.equal(parsed.app, 'evenday');
-  assert.equal(parsed.data.tasks.length, 1);
+  assert.equal(parsed.data.tasks.length, 2);
   await page.keyboard.press('Escape');
   await page.waitForSelector('dialog', { state: 'detached' });
 });
@@ -187,7 +275,7 @@ await step('Invalid imports are rejected without changing data', async () => {
   await page.click('[data-action="import"]');
   for (const bad of ['not json', '{"hello": 1}', '{"app":"evenday","version":1,"data":{"tasks":"oops"}}']) {
     await page.fill('#import-text', bad);
-    await page.click('dialog [data-check]');
+    await page.click('dialog .nav-primary');
     assert.equal(await page.isVisible('#import-error'), true, bad);
   }
   assert.equal(JSON.stringify(await state()), before);
@@ -200,13 +288,13 @@ await step('Valid import replaces data after confirmation, Undo restores', async
   mod.data.tasks.push({ title: 'Imported task', due: today }, { title: '' });
   await page.click('[data-action="import"]');
   await page.fill('#import-text', JSON.stringify(mod));
-  await page.click('dialog [data-check]');
-  assert.match(await page.textContent('#confirm-msg'), /2 tasks.*1 incomplete item/s);
+  await page.click('dialog .nav-primary');
+  assert.match(await page.textContent('#confirm-msg'), /3 tasks.*1 incomplete item/s);
   await page.click('dialog [data-confirm]');
   await page.waitForSelector('dialog', { state: 'detached' });
-  assert.equal((await state()).tasks.length, 2);
+  assert.equal((await state()).tasks.length, 3);
   await page.click('.toast-action');
-  assert.equal((await state()).tasks.length, 1);
+  assert.equal((await state()).tasks.length, 2);
 });
 
 await step('Dark theme applies and persists', async () => {
@@ -221,8 +309,8 @@ await step('Dark theme applies and persists', async () => {
 await step('Keyboard: "n" opens quick add, Escape closes it', async () => {
   await go('tasks');
   await page.locator('body').press('n');
-  await page.waitForSelector('dialog[open] #task-title');
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'task-title');
+  await page.waitForSelector('dialog[open] #capture-text');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'capture-text');
   await page.keyboard.press('Escape');
   await page.waitForSelector('dialog', { state: 'detached' });
 });
@@ -242,19 +330,27 @@ await step('No horizontal overflow at phone and desktop widths', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
 });
 
+await step('Move overdue tasks to today', async () => {
+  await go('today');
+  await page.click('[data-action="move-overdue"]');
+  const s = await state();
+  assert.equal(s.tasks.filter((t) => !t.done && t.due && t.due < today).length, 0);
+  assert.equal(await page.locator('.subhead-warn').count(), 0);
+});
+
 await step('Remove sample data keeps own items', async () => {
   await go('preferences');
   await page.click('[data-action="clear-sample"]');
   const s = await state();
   assert.ok(s.tasks.every((t) => !t.demo) && s.events.every((e) => !e.demo));
-  assert.equal(s.tasks.length, 1);
+  assert.equal(s.tasks.length, 2);
 });
 
 await step('Reset requires confirmation and erases data', async () => {
   await page.click('[data-action="reset"]');
   await page.click('dialog [data-close]:has-text("Cancel")');
   await page.waitForSelector('dialog', { state: 'detached' });
-  assert.equal((await state()).tasks.length, 1);
+  assert.equal((await state()).tasks.length, 2);
   await page.click('[data-action="reset"]');
   await page.click('dialog [data-confirm]');
   await page.waitForSelector('dialog', { state: 'detached' });

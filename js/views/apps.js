@@ -1,4 +1,4 @@
-import { hostOf, tileIcon } from '../components.js';
+import { hostOf, pageHeader, tileIcon } from '../components.js';
 import { esc } from '../ui.js';
 import { icon } from '../icons.js';
 
@@ -26,10 +26,11 @@ export function renderApps(state, ui) {
       </li>`).join('');
 
   return `
-  <header class="page-head">
-    <div><h1>Apps</h1><p class="summary">${edit ? 'Tap a shortcut to edit it. Use the arrows to reorder and the star to show it on Today.' : 'Your go-to sites and apps, one tap away.'}</p></div>
-    ${list.length ? `<button type="button" class="btn ${edit ? 'btn-primary' : 'btn-secondary'} btn-sm" data-action="apps-edit" data-focus="apps-edit" aria-pressed="${edit}">${edit ? 'Done' : `${icon('pencil')}Edit`}</button>` : ''}
-  </header>
+  ${pageHeader({
+    title: 'Apps',
+    summary: edit ? 'Tap a shortcut to edit it. Use the arrows to reorder and the star to show it on Today.' : 'Your go-to sites and apps, one tap away.',
+    actions: list.length ? `<button type="button" class="nav-btn${edit ? ' nav-strong' : ''}" data-action="apps-edit" data-focus="apps-edit" aria-pressed="${edit}">${edit ? 'Done' : 'Edit'}</button>` : '',
+  })}
   <ul class="tile-grid">
     ${tiles}
     <li class="tile"><button type="button" class="tile-body tile-add" data-action="new-shortcut">

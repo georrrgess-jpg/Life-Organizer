@@ -3,7 +3,9 @@ import * as store from './store.js';
 import { todayKey, parseKey } from './dates.js';
 import { icon } from './icons.js';
 import { confirmDialog, reducedMotion, toast } from './ui.js';
-import { openEventDetail, openEventForm, openQuickAdd, openShortcutForm, openTaskForm } from './forms.js';
+import { openEventDetail, openEventForm, openShortcutForm, openTaskForm } from './forms.js';
+import { openCapture, openCaptureHelp } from './capture.js';
+import { parseItem } from './parse.js';
 import { renderToday } from './views/today.js';
 import { renderCalendar, calendarKey } from './views/calendar.js';
 import { renderTasks } from './views/tasks.js';
@@ -31,15 +33,16 @@ const ui = {
 let main;
 
 function shell() {
-  const nav = Object.entries(ROUTES).map(([key, r]) => `<a href="#${key}" class="nav-item${r.hidden ? ' nav-secondary' : ''}" data-nav="${key}">${icon(r.icon)}<span>${r.label}</span></a>`).join('');
+  const item = (key) => `<a href="#${key}" class="nav-item${ROUTES[key].hidden ? ' nav-secondary' : ''}" data-nav="${key}">${icon(ROUTES[key].icon)}<span>${ROUTES[key].label}</span></a>`;
   document.getElementById('app').innerHTML = `
     <a class="skip-link" href="#main">Skip to content</a>
     <nav class="nav" aria-label="Main">
       <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Evenday</div>
-      ${nav}
+      ${item('today')}${item('calendar')}
+      <button type="button" class="nav-add" data-action="quick-add" aria-label="Quick add a task or event" title="Quick add (N)">${icon('plus')}<span>Quick add</span></button>
+      ${item('tasks')}${item('apps')}${item('preferences')}
     </nav>
     <main id="main" tabindex="-1"></main>
-    <button type="button" class="fab" data-action="quick-add" aria-label="Add task or event">${icon('plus')}</button>
     <div id="storage-warning" class="banner" role="alert" hidden>${icon('alert')}<span>This browser isn’t saving data (private mode or storage is blocked). Changes will be lost when you close the page.</span></div>`;
   main = document.getElementById('main');
 }
@@ -61,7 +64,6 @@ function render() {
     if (a.dataset.nav === ui.route) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
-  document.querySelector('.fab').hidden = ui.route === 'preferences';
   document.getElementById('storage-warning').hidden = store.isStorageOk();
   applyTheme();
   if (draft && main.querySelector('.quick-task input')) main.querySelector('.quick-task input').value = draft;
@@ -72,6 +74,7 @@ function route() {
   const key = location.hash.slice(1);
   const next = ROUTES[key] ? key : 'today';
   const changed = next !== ui.route;
+  if (changed) ui.prevRoute = ui.route;
   ui.route = next;
   if (changed) ui.appsEdit = false;
   render();
@@ -83,6 +86,13 @@ function route() {
 }
 
 // ---------- Actions ----------
+
+// Default due date for new items, based on where the user is.
+function contextDue() {
+  if (ui.route === 'calendar') return ui.selected;
+  if (ui.route === 'tasks' && ui.taskTab === 'upcoming') return null;
+  return todayKey();
+}
 
 function selectDay(key) {
   ui.selected = key;
@@ -131,10 +141,16 @@ function openShortcut(link, e) {
 }
 
 const actions = {
-  'quick-add': () => {
-    if (ui.route === 'apps') return openShortcutForm(null);
-    if (ui.route === 'calendar') return openQuickAdd('event', { date: ui.selected });
-    return openQuickAdd('task', { due: ui.route === 'tasks' && ui.taskTab === 'upcoming' ? null : todayKey() });
+  'quick-add': () => openCapture({ due: contextDue() }),
+  'quick-voice': () => openCapture({ due: contextDue(), listenNow: true }),
+  'capture-help': openCaptureHelp,
+  'go-back': () => { location.hash = ui.prevRoute && ui.prevRoute !== 'preferences' ? ui.prevRoute : 'today'; },
+  'move-overdue': () => {
+    const today = todayKey();
+    const late = store.getState().tasks.filter((t) => !t.done && t.due && t.due < today);
+    const snap = store.snapshot();
+    late.forEach((t) => store.saveTask({ ...t, due: today }));
+    toast(`Moved ${late.length} task${late.length > 1 ? 's' : ''} to today`, { actionLabel: 'Undo', onAction: () => store.restore(snap) });
   },
   'toggle-task': toggleTask,
   'edit-task': (el) => openTaskForm(store.getState().tasks.find((t) => t.id === el.dataset.id)),
@@ -187,8 +203,15 @@ function bindEvents() {
     const title = input.value.trim();
     if (!title) return input.focus();
     input.value = '';
-    const t = store.saveTask({ title, due: form.dataset.due || null });
-    toast(`Added “${t.title}”`, { actionLabel: 'Edit', onAction: () => openTaskForm(store.getState().tasks.find((x) => x.id === t.id)) });
+    // Understands dates, times, priority and tags, like Quick add.
+    const d = parseItem(title, { dayFirst: !/^en(-US)?$/i.test(navigator.language || 'en-US') }) || { kind: 'task', title };
+    if (d.kind === 'event') {
+      const ev = store.saveEvent({ ...d, date: d.date || form.dataset.due || todayKey() });
+      toast(`Added event “${ev.title}”`, { actionLabel: 'Edit', onAction: () => openEventForm(store.getState().events.find((x) => x.id === ev.id)) });
+    } else {
+      const t = store.saveTask({ title: d.title, due: d.date ?? (form.dataset.due || null), priority: d.priority, category: d.category, notes: d.notes });
+      toast(`Added “${t.title}”`, { actionLabel: 'Edit', onAction: () => openTaskForm(store.getState().tasks.find((x) => x.id === t.id)) });
+    }
     main.querySelector('.quick-task input')?.focus();
   });
 
@@ -211,13 +234,16 @@ function bindEvents() {
 
   // "n" opens quick add when not typing.
   document.addEventListener('keydown', (e) => {
-    if (e.key !== 'n' || e.metaKey || e.ctrlKey || e.altKey || document.querySelector('dialog[open]')) return;
+    if ((e.key !== 'n' && e.key !== 'N') || e.metaKey || e.ctrlKey || e.altKey || document.querySelector('dialog[open]')) return;
     if (e.target.closest('input, textarea, select, [contenteditable]')) return;
     e.preventDefault();
     actions['quick-add']();
   });
 
   window.addEventListener('hashchange', route);
+  const onScroll = () => document.body.classList.toggle('scrolled', window.scrollY > 28);
+  window.addEventListener('scroll', onScroll, { passive: true });
+  bindSwipes();
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
 
   // Roll the dashboard over at midnight and when returning to the app.
@@ -226,6 +252,55 @@ function bindEvents() {
   };
   setInterval(checkDay, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkDay(); });
+}
+
+// Touch gestures: swipe a task right to complete it or left to delete it;
+// swipe the month grid to change months.
+let swipeEndedAt = 0;
+function bindSwipes() {
+  let g = null;
+  main.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch') return;
+    const row = e.target.closest('.task-row');
+    const grid = e.target.closest('[data-swipe="month"]');
+    if (!row && !grid) return;
+    g = { x: e.clientX, y: e.clientY, row, grid, dx: 0, axis: null };
+  });
+  main.addEventListener('pointermove', (e) => {
+    if (!g) return;
+    g.dx = e.clientX - g.x;
+    const dy = e.clientY - g.y;
+    if (!g.axis && Math.max(Math.abs(g.dx), Math.abs(dy)) > 10) g.axis = Math.abs(g.dx) > Math.abs(dy) ? 'x' : 'y';
+    if (g.axis !== 'x' || !g.row) return;
+    const dx = Math.max(-140, Math.min(140, g.dx));
+    g.row.classList.add('swiping');
+    g.row.dataset.swipe = dx > 0 ? 'complete' : 'delete';
+    g.row.classList.toggle('armed', Math.abs(dx) > 80);
+    g.row.style.setProperty('--dx', `${dx}px`);
+  });
+  const end = () => {
+    if (!g) return;
+    const { row, grid, dx, axis } = g;
+    g = null;
+    if (axis !== 'x') return;
+    swipeEndedAt = Date.now();
+    if (grid && Math.abs(dx) > 50) { shiftMonth(dx < 0 ? 1 : -1); render(); return; }
+    if (!row) return;
+    row.classList.remove('swiping', 'armed');
+    row.style.removeProperty('--dx');
+    if (Math.abs(dx) <= 80) return;
+    const id = row.dataset.task;
+    if (dx > 0) toggleTask(row.querySelector('.check'));
+    else {
+      const snap = store.snapshot();
+      store.deleteTask(id);
+      toast('Task deleted', { actionLabel: 'Undo', onAction: () => store.restore(snap) });
+    }
+  };
+  main.addEventListener('pointerup', end);
+  main.addEventListener('pointercancel', end);
+  // A swipe shouldn't also count as a tap.
+  main.addEventListener('click', (e) => { if (Date.now() - swipeEndedAt < 350) { e.stopPropagation(); e.preventDefault(); } }, true);
 }
 
 function start() {

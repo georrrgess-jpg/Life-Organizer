@@ -27,13 +27,15 @@ export function taskRow(t, { showDue = true, today = todayKey() } = {}) {
   if (t.priority === 'low') meta.push('<span class="prio prio-low">Low</span>');
   if (t.category) meta.push(catLabel(t.category));
   if (t.notes) meta.push(`<span class="has-notes" title="Has notes">${icon('note')}</span>`);
-  return `<li class="task-row${t.done ? ' is-done' : ''}" data-task="${t.id}">
+  return `<li class="task-row${t.done ? ' is-done' : ''}" data-task="${t.id}" data-done-label="${t.done ? 'Reopen' : 'Done'}">
+    <div class="row-inner">
     <button type="button" class="check" role="checkbox" aria-checked="${t.done}" data-action="toggle-task" data-id="${t.id}"
       data-focus="check-${t.id}" aria-label="${t.done ? 'Reopen' : 'Complete'}: ${esc(t.title)}">${icon('check')}</button>
     <button type="button" class="task-main" data-action="edit-task" data-id="${t.id}" data-focus="task-${t.id}">
       <span class="task-title">${esc(t.title)}</span>
       ${meta.length ? `<span class="task-meta">${meta.join('')}</span>` : ''}
     </button>
+    </div>
   </li>`;
 }
 
@@ -64,4 +66,25 @@ export function tileIcon(s, cls = '') {
 
 export function hostOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+}
+
+// iOS-style header: a compact bar (buttons + a title that appears on scroll) above a large title.
+export function pageHeader({ title, eyebrow = '', summary = '', actions = '', back = false }) {
+  return `<div class="topbar">
+    <div class="topbar-side">${back ? `<button type="button" class="nav-btn back-btn" data-action="go-back">${icon('back')}Back</button>` : ''}</div>
+    <span class="topbar-title" aria-hidden="true">${esc(title)}</span>
+    <div class="topbar-side topbar-actions">${actions}${back ? '' : `<a class="btn-icon mobile-only" href="#preferences" aria-label="Settings">${icon('settings')}</a>`}</div>
+  </div>
+  <header class="page-head">
+    ${eyebrow ? `<p class="eyebrow">${esc(eyebrow)}</p>` : ''}
+    <h1>${esc(title)}</h1>
+    ${summary ? `<p class="summary">${summary}</p>` : ''}
+  </header>`;
+}
+
+export function captureBar(placeholder = 'Add a task or event…') {
+  return `<div class="capture-bar">
+    <button type="button" class="capture-open" data-action="quick-add">${icon('wand')}<span>${esc(placeholder)}</span></button>
+    <button type="button" class="capture-mic" data-action="quick-voice" aria-label="Add by voice">${icon('mic')}</button>
+  </div>`;
 }

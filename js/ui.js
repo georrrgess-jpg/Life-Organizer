@@ -1,5 +1,4 @@
 // Small UI helpers: escaping, dialogs, confirmations and toasts.
-import { icon } from './icons.js';
 
 export function esc(v) {
   return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -13,8 +12,9 @@ export function openSheet(content, { label, onClose, className = '' } = {}) {
   const dlg = document.createElement('dialog');
   dlg.className = `sheet ${className}`;
   if (label) dlg.setAttribute('aria-label', label);
-  dlg.innerHTML = content;
+  dlg.innerHTML = `<div class="grabber" aria-hidden="true"></div>${content}`;
   document.body.append(dlg);
+  enableDragToClose(dlg);
   const opener = handoffOpener || document.activeElement;
   handoffOpener = null;
   dlg._opener = opener;
@@ -50,12 +50,46 @@ export function closeSheet(dlg) {
   setTimeout(() => dlg.close(), 160);
 }
 
-export function sheetHeader(title, extra = '') {
+// iOS-style sheet header: Cancel on the left, the main action on the right.
+// With `submit`, the right button submits the surrounding form; otherwise it reads "Done".
+export function sheetHeader(title, { submit, extra = '' } = {}) {
   return `<header class="sheet-head">
+    <button type="button" class="nav-btn" data-close>${submit ? 'Cancel' : 'Close'}</button>
     <h2 class="sheet-title">${esc(title)}</h2>
-    ${extra}
-    <button type="button" class="btn-icon" data-close aria-label="Close">${icon('x')}</button>
-  </header>`;
+    ${submit ? `<button type="submit" class="nav-btn nav-primary">${esc(submit)}</button>` : '<span class="nav-btn" aria-hidden="true"></span>'}
+  </header>${extra ? `<div class="sheet-sub">${extra}</div>` : ''}`;
+}
+
+// Drag the grabber or header down to dismiss a sheet on phones.
+function enableDragToClose(dlg) {
+  let startY = null;
+  let dy = 0;
+  dlg.addEventListener('pointerdown', (e) => {
+    if (!e.target.closest('.grabber, .sheet-head') || e.target.closest('button, input, a, label')) return;
+    if (matchMedia('(min-width: 640px)').matches) return;
+    startY = e.clientY;
+    dy = 0;
+    dlg.setPointerCapture(e.pointerId);
+    dlg.classList.add('dragging');
+  });
+  dlg.addEventListener('pointermove', (e) => {
+    if (startY === null) return;
+    dy = Math.max(0, e.clientY - startY);
+    dlg.style.transform = `translateY(${dy}px)`;
+  });
+  const end = () => {
+    if (startY === null) return;
+    startY = null;
+    dlg.classList.remove('dragging');
+    if (dy > 110) {
+      dlg.style.transform = 'translateY(100%)';
+      setTimeout(() => dlg.close(), reducedMotion() ? 0 : 180);
+    } else {
+      dlg.style.transform = '';
+    }
+  };
+  dlg.addEventListener('pointerup', end);
+  dlg.addEventListener('pointercancel', end);
 }
 
 export function confirmDialog({ title, message, confirmLabel = 'Confirm', danger = false, extra = '' }) {
