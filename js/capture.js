@@ -7,6 +7,7 @@ import { esc, handoffSheet, openSheet, closeSheet, sheetHeader, toast } from './
 import { catLabel } from './components.js';
 import { icon } from './icons.js';
 import { openEventForm, openShortcutForm, openTaskForm } from './forms.js';
+import { openGoalForm, openHabitForm } from './views/life.js';
 
 const EXAMPLES = ['Call mom tomorrow', 'Team meeting Mon 10–11am #work', 'Essay due Friday !', 'Lunch with Sam at Joe’s Café Sat 12:30'];
 const dayFirst = () => !/^en(-US)?$/i.test(navigator.language || 'en-US');
@@ -37,6 +38,8 @@ export function openCapture({ due = todayKey(), listenNow = false } = {}) {
         <div class="group-list">
           <button type="button" class="cell cell-btn" data-manual="task"><span class="cell-icon tone-accent">${icon('tasks')}</span><span class="cell-label">New task</span>${icon('chevronRight', 'chev')}</button>
           <button type="button" class="cell cell-btn" data-manual="event"><span class="cell-icon tone-blue">${icon('calendar')}</span><span class="cell-label">New event</span>${icon('chevronRight', 'chev')}</button>
+          <button type="button" class="cell cell-btn" data-manual="habit"><span class="cell-icon tone-amber">${icon('flame')}</span><span class="cell-label">New habit</span>${icon('chevronRight', 'chev')}</button>
+          <button type="button" class="cell cell-btn" data-manual="goal"><span class="cell-icon tone-red">${icon('target')}</span><span class="cell-label">New goal</span>${icon('chevronRight', 'chev')}</button>
           <button type="button" class="cell cell-btn" data-manual="shortcut"><span class="cell-icon tone-violet">${icon('grid')}</span><span class="cell-label">New shortcut</span>${icon('chevronRight', 'chev')}</button>
         </div>
       </div>
@@ -128,6 +131,8 @@ export function openCapture({ due = todayKey(), listenNow = false } = {}) {
       handoffSheet(dlg);
       if (kind === 'task') openTaskForm(null, d ? { title: d.title, due: d.date ?? due, priority: d.priority, category: d.category, notes: d.notes } : { due });
       else if (kind === 'event') openEventForm(null, d ? { ...d, date: d.date || fallbackDate() } : { date: fallbackDate() });
+      else if (kind === 'habit') openHabitForm(null);
+      else if (kind === 'goal') openGoalForm(null);
       else openShortcutForm(null);
     } else if (t.dataset.help) {
       openCaptureHelp();

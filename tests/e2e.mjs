@@ -363,6 +363,30 @@ await step('Life: count goal reaches its target; task goal tracks linked tasks',
   assert.match(await page.textContent('.heat-foot'), /: \d+ task/);
 });
 
+await step('An Undo disappears once something else changes, so it can never roll back newer edits', async () => {
+  await go('life');
+  const h = (await state()).habits.find((x) => x.title === 'Stretch');
+  await go('tasks');
+  await page.fill('#quick-tasks', 'Temporary task');
+  await page.press('#quick-tasks', 'Enter');
+  const id = (await state()).tasks.find((x) => x.title === 'Temporary task').id;
+  await swipe(`.task-row[data-task="${id}"] .task-main`, -120);
+  await page.locator('.toast-action', { hasText: 'Undo' }).waitFor();
+  await go('life');
+  await page.click(`[data-action="habit-toggle"][data-id="${h.id}"]`);
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator('.toast-action', { hasText: 'Undo' }).count(), 0, 'stale Undo removed');
+  assert.equal((await state()).habits.find((x) => x.id === h.id).log[today], true, 'habit change kept');
+});
+
+await step('Quick add offers new habit and goal forms', async () => {
+  await page.click('.nav-add');
+  await page.click('dialog [data-manual="habit"]');
+  await page.waitForSelector('dialog[open] #habit-title');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('dialog', { state: 'detached' });
+});
+
 await step('Data persists after reload', async () => {
   await go('today');
   await page.reload();

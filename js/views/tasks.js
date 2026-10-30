@@ -16,7 +16,15 @@ export function taskGroups(state, today = todayKey()) {
   };
 }
 
-const list = (tasks, opts) => `<ul class="task-list">${tasks.map((t) => taskRow(t, opts)).join('')}</ul>`;
+// Long groups render in pages of 100 so huge lists stay fast.
+let expanded = new Set();
+const list = (tasks, opts, key = 'all') => {
+  const limit = expanded.has(key) ? tasks.length : 100;
+  const more = tasks.length - limit;
+  return `<ul class="task-list">${tasks.slice(0, limit).map((t) => taskRow(t, opts)).join('')}</ul>
+    ${more > 0 ? `<button type="button" class="link-btn" data-action="tasks-more" data-key="${key}">Show ${more} more</button>` : ''}`;
+};
+export const expandGroup = (key) => { expanded = new Set([...expanded, key]); };
 
 export function renderTasks(state, ui) {
   const today = todayKey();
@@ -28,25 +36,25 @@ export function renderTasks(state, ui) {
   let body = '';
   if (tab === 'today') {
     body = counts.today
-      ? `${g.overdue.length ? `<h3 class="subhead subhead-warn">Overdue</h3>${list(g.overdue, { today })}` : ''}
-         ${g.today.length ? `<h3 class="subhead">Due today</h3>${list(g.today, { showDue: false, today })}` : ''}`
+      ? `${g.overdue.length ? `<h3 class="subhead subhead-warn">Overdue</h3>${list(g.overdue, { today }, 'overdue')}` : ''}
+         ${g.today.length ? `<h3 class="subhead">Due today</h3>${list(g.today, { showDue: false, today }, 'today')}` : ''}`
       : emptyState('tasks', 'Nothing due today', 'Add a task above, or check Upcoming for what’s next.');
   } else if (tab === 'upcoming') {
     const byDate = {};
     for (const t of g.upcoming) (byDate[t.due] ||= []).push(t);
     body = counts.upcoming
       ? `${Object.entries(byDate).map(([d, ts]) => `<h3 class="subhead">${esc(relativeDay(d, today))}</h3>${list(ts, { showDue: false, today })}`).join('')}
-         ${g.someday.length ? `<h3 class="subhead">No due date</h3>${list(g.someday, { today })}` : ''}`
+         ${g.someday.length ? `<h3 class="subhead">No due date</h3>${list(g.someday, { today }, 'someday')}` : ''}`
       : emptyState('calendar', 'Nothing upcoming', 'Tasks with a future due date, or no date at all, appear here.');
   } else {
     body = counts.done
-      ? `${list(g.done, { today })}
+      ? `${list(g.done, { today }, 'done')}
          <div class="list-foot"><button type="button" class="btn btn-ghost-danger btn-sm" data-action="clear-completed">${icon('trash')}Clear completed</button></div>`
       : emptyState('check', 'No completed tasks yet', 'Tasks you check off are kept here so you can reopen them.');
   }
 
   return `
-  ${pageHeader({ title: 'Tasks' })}
+  ${pageHeader({ title: 'Tasks', actions: '<button type="button" class="nav-btn" data-action="open-plan">Plan</button>' })}
   <div class="segmented tabs" role="tablist" aria-label="Task views">
     ${tabs.map(([k, label]) => `<button type="button" role="tab" class="seg-btn" data-action="task-tab" data-tab="${k}" data-focus="tab-${k}"
       aria-selected="${tab === k}" tabindex="${tab === k ? 0 : -1}">${label}${counts[k] ? `<span class="count">${counts[k]}</span>` : ''}</button>`).join('')}

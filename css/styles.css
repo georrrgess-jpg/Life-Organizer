@@ -890,3 +890,7 @@ button.heat:not(:disabled):hover { outline: 2px solid var(--text-3); outline-off
   .plan-prefs .seg-btn .icon { display: none; }
   .plan-prefs .seg-btn { padding: 0 6px; }
 }
+.planned-list li { display: flex; gap: 12px; align-items: baseline; padding: 7px 2px; font-size: 14.5px; }
+.planned-list li + li { border-top: 1px solid var(--border); }
+.planned-time { width: 66px; flex: none; color: var(--accent); font-weight: 650; font-size: 13px; font-variant-numeric: tabular-nums; }
+.planned-list .is-done .planned-title { text-decoration: line-through; color: var(--text-3); }

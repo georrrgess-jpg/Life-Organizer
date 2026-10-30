@@ -3,6 +3,8 @@
 A calm life organizer: see what's due today, what's coming up, and reach the apps you use most. This is a **browser prototype**, not an App Store build.
 
 - **Quick add (type or speak)**: write or dictate something like “Dentist Friday 3pm, buy milk, essay due Monday !” and Evenday turns it into tasks and events. You see a preview first and can switch an item between task and event, or drop it. The parsing runs entirely on the device, so it works offline and needs no account or API key.
+- **Plan My Day**: one tap builds a time-blocked plan for today or tomorrow from your open tasks, fitted around your events, with important work in your best-energy hours. Complete, resize, lock or skip blocks, move slipped tasks to tomorrow, and re-plan when the day changes.
+- **Life**: habits with streaks, goals (a number or linked tasks) with pace, a 12-week activity heat-map, weekly progress rings and a category balance view.
 - **Today**: date, an “Up next” card, a schedule with a Now marker, overdue and due tasks with progress and “Move to today”, favorite shortcuts.
 - **Calendar**: month view, agenda for the selected day, events with times or all-day, locations, notes and category colors.
 - **Tasks**: Today, Upcoming and Done views, due dates, priority, categories. On a phone, swipe right to complete or left to delete; every change can be undone.
@@ -33,7 +35,7 @@ Any static server works too, for example `python3 -m http.server 5173`. Opening 
 npm test
 ```
 
-Runs 21 parser unit checks, then 30 end-to-end checks in headless Chromium: onboarding, themes, Customize Today, Quick add and a simulated voice session, swipe gestures, tasks, events (including a DST-change date), shortcuts, persistence, export/import, theme, keyboard, overflow at 320–1280px, and reset. It needs Playwright with Chromium (`npm i -D playwright && npx playwright install chromium` if you don't have it).
+Runs 21 parser and 16 planner/dashboard unit checks, then 38 end-to-end checks in headless Chromium: onboarding, themes, Customize Today, Quick add and a simulated voice session, swipe gestures, tasks, events (including a DST-change date), shortcuts, persistence, export/import, theme, keyboard, overflow at 320–1280px, and reset. It needs Playwright with Chromium (`npm i -D playwright && npx playwright install chromium` if you don't have it).
 
 Keyboard: press `n` for Quick add, `Esc` to close a sheet, arrow keys to move between calendar days and task tabs.
 
@@ -53,6 +55,10 @@ js/forms.js           task, event and shortcut editors
 js/capture.js         Quick add sheet (type or speak, preview, add)
 js/parse.js           on-device natural-language parser for Quick add
 js/voice.js           speech recognition wrapper
+js/planner.js         Plan My Day engine (pure, unit tested)
+js/life.js            streaks, goal progress, activity, balance
+js/views/plan.js      Plan screen
+js/views/life.js      Life Dashboard, habit and goal editors
 js/themes.js          theme presets, accents, fonts and how they're applied
 js/views/appearance.js  Themes & appearance, Customize Today, welcome
 js/components.js      shared rows, tiles and empty states
@@ -61,8 +67,13 @@ sw.js, manifest       offline support and install metadata
 scripts/serve.mjs     zero-dependency dev server
 scripts/build-artifact.mjs  single-file build for hosted previews (uses esbuild via npx)
 tests/parse.test.mjs  parser unit checks
+tests/features.test.mjs  planner and dashboard unit checks
 tests/e2e.mjs         end-to-end checks
 ```
+
+## Saved data
+
+Data is stored as JSON in `localStorage` with a format version. When the format changes (version 2 added estimates, goals, habits and plans), older data is upgraded automatically on load and an untouched copy is kept under `evenday:backup:pre-v2`. Unreadable data is never overwritten; it's kept under an `evenday:unreadable:*` key.
 
 ## Known limitations
 

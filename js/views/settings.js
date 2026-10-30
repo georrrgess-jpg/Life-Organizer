@@ -8,7 +8,7 @@ const seg = (action, current, options, label) => `<div class="segmented" role="r
   ${options.map(([v, text, ic]) => `<button type="button" role="radio" class="seg-btn" data-action="${action}" data-value="${v}" data-focus="${action}-${v}" aria-checked="${String(current) === String(v)}">${ic ? icon(ic) : ''}${text}</button>`).join('')}
 </div>`;
 
-const counts = (d) => `${d.tasks.length} tasks, ${d.events.length} events and ${d.shortcuts.length} shortcuts`;
+const counts = (d) => `${d.tasks.length} tasks, ${d.events.length} events, ${(d.goals || []).length} goals, ${(d.habits || []).length} habits and ${d.shortcuts.length} shortcuts`;
 const row = (action, ic, tone, label, detail = '', danger = false) => `<button type="button" class="cell cell-btn${danger ? ' danger' : ''}" data-action="${action}" data-focus="row-${action}">
   <span class="cell-icon tone-${tone}">${icon(ic)}</span><span class="cell-label">${label}</span>
   ${detail ? `<span class="cell-detail">${detail}</span>` : ''}${danger ? '' : icon('chevronRight', 'chev')}
@@ -16,7 +16,6 @@ const row = (action, ic, tone, label, detail = '', danger = false) => `<button t
 
 export function renderSettings(state) {
   const sample = store.hasSampleData();
-  const { tasks, events, shortcuts } = state;
   return `
   ${pageHeader({ title: 'Settings', back: true })}
   <div class="settings">
@@ -46,7 +45,7 @@ export function renderSettings(state) {
         ${row('import', 'upload', 'blue', 'Import backup')}
         ${sample ? row('clear-sample', 'x', 'gray', 'Remove sample data') : row('load-sample', 'sparkle', 'violet', 'Load sample data')}
       </div>
-      <p class="group-foot">${tasks.length} tasks, ${events.length} events and ${shortcuts.length} shortcuts are saved in this browser on this device. There’s no account and nothing is sent anywhere. Export a backup before clearing browser data or switching devices.</p>
+      <p class="group-foot">${esc(counts(state))} are saved in this browser on this device. There’s no account and nothing is sent anywhere. Export a backup before clearing browser data or switching devices.</p>
     </section>
 
     <section aria-labelledby="h-reset">

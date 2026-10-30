@@ -110,6 +110,13 @@ export function confirmDialog({ title, message, confirmLabel = 'Confirm', danger
 }
 
 let toastTimer;
+let toastIsFresh = false;
+let hideCurrentToast = null;
+
+// Any later data change makes an older Undo unsafe (it would roll that change back too), so drop it.
+export function onDataChange() {
+  if (!toastIsFresh && hideCurrentToast && document.querySelector('#toasts .toast-action')) hideCurrentToast();
+}
 export function toast(message, { actionLabel, onAction, actionHref, duration = 4500 } = {}) {
   const region = document.getElementById('toasts');
   clearTimeout(toastTimer);
@@ -121,9 +128,13 @@ export function toast(message, { actionLabel, onAction, actionHref, duration = 4
   const el = region.firstElementChild;
   el.querySelector('.toast-action')?.addEventListener('click', () => { onAction?.(); hide(); });
   function hide() {
+    if (hideCurrentToast === hide) hideCurrentToast = null;
     el.classList.add('leaving');
     setTimeout(() => el.remove(), reducedMotion() ? 0 : 200);
   }
+  hideCurrentToast = hide;
+  toastIsFresh = true;
+  setTimeout(() => { toastIsFresh = false; }, 0);
   toastTimer = setTimeout(hide, duration);
 }
 

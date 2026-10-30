@@ -2,7 +2,7 @@
 import * as store from './store.js';
 import { todayKey, parseKey } from './dates.js';
 import { icon } from './icons.js';
-import { confirmDialog, reducedMotion, toast } from './ui.js';
+import { confirmDialog, onDataChange, reducedMotion, toast } from './ui.js';
 import { openEventDetail, openEventForm, openShortcutForm, openTaskForm } from './forms.js';
 import { openCapture, openCaptureHelp } from './capture.js';
 import { parseItem } from './parse.js';
@@ -10,7 +10,7 @@ import { applyAppearance } from './themes.js';
 import { openThemeSheet, openTodaySheet, openWelcome } from './views/appearance.js';
 import { renderToday } from './views/today.js';
 import { renderCalendar, calendarKey } from './views/calendar.js';
-import { renderTasks } from './views/tasks.js';
+import { expandGroup, renderTasks } from './views/tasks.js';
 import { renderApps } from './views/apps.js';
 import { confirmReset, openExport, openImport, renderSettings } from './views/settings.js';
 import { carryOver, generatePlan, openBlockSheet, openPlanHours, planDate, renderPlan } from './views/plan.js';
@@ -175,6 +175,7 @@ const actions = {
   'plan-block': (el) => openBlockSheet(el.dataset.id, planDate(ui)),
   'plan-carry': (el) => carryOver(el.dataset.ids.split(',').filter(Boolean), planDate(ui)),
   'open-plan': () => { ui.planDay = 'today'; location.hash = 'plan'; },
+  'open-plan-day': (el) => { ui.planDay = el.dataset.date === todayKey() ? 'today' : 'tomorrow'; location.hash = 'plan'; },
   // Life
   'nav-life': () => { location.hash = 'life'; },
   'habit-toggle': (el) => {
@@ -216,6 +217,7 @@ const actions = {
   'cal-prev': () => { shiftMonth(-1); render(); },
   'cal-next': () => { shiftMonth(1); render(); },
   'cal-today': () => { selectDay(todayKey()); render(); main.querySelector('.day.is-selected')?.focus(); },
+  'tasks-more': (el) => { expandGroup(el.dataset.key); render(); },
   'task-tab': (el) => { ui.taskTab = el.dataset.tab; render(); },
   'clear-completed': async () => {
     const n = store.getState().tasks.filter((t) => t.done).length;
@@ -363,7 +365,7 @@ function start() {
   store.load();
   shell();
   bindEvents();
-  store.subscribe(render);
+  store.subscribe(() => { onDataChange(); render(); });
   route();
   if (store.isFirstRun() && !store.getState().prefs.onboarded) openWelcome();
   if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !location.hostname.endsWith('claude.ai')) {

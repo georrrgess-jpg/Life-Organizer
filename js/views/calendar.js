@@ -1,4 +1,4 @@
-import { addDays, formatDate, monthGrid, parseKey, todayKey, weekdayLabels } from '../dates.js';
+import { addDays, formatDate, formatTime, monthGrid, parseKey, todayKey, weekdayLabels } from '../dates.js';
 import { emptyState, eventRow, pageHeader, sortEvents, taskRow } from '../components.js';
 import { esc } from '../ui.js';
 import { icon } from '../icons.js';
@@ -47,9 +47,20 @@ export function renderCalendar(state, ui) {
       ${selEvents.length
         ? `<ul class="event-list">${selEvents.map((e) => eventRow(e)).join('')}</ul>`
         : emptyState('calendar', sel === today ? 'Nothing scheduled today' : 'Nothing scheduled', 'Add an event for this day with the button above.')}
+      ${plannedFor(state, sel)}
       ${selTasks.length ? `<h3 class="subhead">Tasks due</h3><ul class="task-list">${selTasks.map((t) => taskRow(t, { showDue: false })).join('')}</ul>` : ''}
     </section>
   </div>`;
+}
+
+// Plan My Day blocks for the selected day, so the calendar shows the whole picture.
+function plannedFor(state, date) {
+  const plan = state.plans[date];
+  const byId = Object.fromEntries(state.tasks.map((t) => [t.id, t]));
+  const blocks = plan ? plan.blocks.filter((b) => byId[b.taskId]) : [];
+  if (!blocks.length) return '';
+  return `<div class="subhead-row"><h3 class="subhead">Planned focus</h3>${date === todayKey() || date === addDays(todayKey(), 1) ? `<button type="button" class="link-btn small" data-action="open-plan-day" data-date="${date}">Open plan</button>` : ''}</div>
+    <ul class="planned-list">${blocks.map((b) => `<li class="${byId[b.taskId].done ? 'is-done' : ''}"><span class="planned-time">${esc(formatTime(b.start))}</span><span class="planned-title">${esc(byId[b.taskId].title)}</span></li>`).join('')}</ul>`;
 }
 
 // Arrow-key movement between days; returns the new selected key or null.
