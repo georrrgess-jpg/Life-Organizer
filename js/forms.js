@@ -1,6 +1,6 @@
 // Editors for tasks, events and shortcuts, shown as iOS-style grouped sheets.
 import * as store from './store.js';
-import { CATEGORIES, PRIORITIES, TASK_CATEGORIES, TILE_COLORS, eventTimeError } from './store.js';
+import { CATEGORIES, ESTIMATES, PRIORITIES, TASK_CATEGORIES, TILE_COLORS, eventTimeError } from './store.js';
 import { addDays, formatDate, formatTime, fromMinutes, isValidKey, suggestedStart, todayKey, toMinutes } from './dates.js';
 import { closeSheet, confirmDialog, esc, handoffSheet, openSheet, sheetHeader, toast } from './ui.js';
 import { GLYPHS, icon } from './icons.js';
@@ -25,7 +25,10 @@ const actionCell = (attr, name, label, danger = false) =>
 
 export function openTaskForm(task, defaults = {}) {
   const today = todayKey();
-  const t = task || { title: '', notes: '', due: today, priority: 'normal', category: null, ...defined(defaults) };
+  const t = task || { title: '', notes: '', due: today, priority: 'normal', category: null, estimate: null, goalId: null, ...defined(defaults) };
+  const goals = store.getState().goals.filter((g) => !g.completedAt || g.id === t.goalId);
+  const est = t.estimate || { high: 60, normal: 30, low: 15 }[t.priority];
+  const dur = (m) => (m >= 60 ? `${m / 60}h`.replace('.5h', '½h') : `${m}m`);
   const dlg = openSheet(`<form class="form" novalidate>
     ${sheetHeader(task ? 'Edit task' : 'New task', { submit: task ? 'Save' : 'Add' })}
     <div class="sheet-body">
@@ -54,6 +57,10 @@ export function openTaskForm(task, defaults = {}) {
       </div>
       <fieldset class="field"><legend class="group-label">Priority</legend>${segmented('priority', Object.entries(PRIORITIES), t.priority, 'Priority')}</fieldset>
       <fieldset class="field"><legend class="group-label">Category</legend>${catChips('category', TASK_CATEGORIES, t.category)}</fieldset>
+      <fieldset class="field"><legend class="group-label">How long? <span class="optional">used by Plan My Day</span></legend>
+        <div class="segmented est-seg" role="radiogroup" aria-label="Estimated time">${ESTIMATES.map((m) => `<label class="seg"><input type="radio" name="estimate" value="${m}" ${m === est ? 'checked' : ''}><span>${dur(m)}</span></label>`).join('')}</div></fieldset>
+      ${goals.length ? `<div class="group-list"><label class="cell" for="task-goal"><span class="cell-icon tone-violet">${icon('target')}</span><span class="cell-label">Goal</span>
+        <select id="task-goal" class="cell-value" name="goalId"><option value="">None</option>${goals.map((g) => `<option value="${g.id}" ${t.goalId === g.id ? 'selected' : ''}>${esc(g.title)}</option>`).join('')}</select></label></div>` : ''}
       ${task ? `<div class="group-list">
         ${actionCell('data-complete', task.done ? 'refresh' : 'check', task.done ? 'Reopen task' : 'Mark as done')}
         ${actionCell('data-delete', 'trash', 'Delete task', true)}
@@ -67,6 +74,7 @@ export function openTaskForm(task, defaults = {}) {
     id: task?.id, title: form.title.value.trim(),
     due: isValidKey(form.due.value) ? form.due.value : null,
     priority: form.priority.value, category: form.category.value || null, notes: form.notes.value,
+    estimate: Number(form.estimate.value), goalId: form.goalId ? form.goalId.value || null : t.goalId,
   });
   form.addEventListener('submit', (e) => {
     e.preventDefault();

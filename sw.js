@@ -1,7 +1,7 @@
 // Offline support: network first, falling back to the cached copy.
-const CACHE = 'evenday-v3';
+const CACHE = 'evenday-v4';
 const FILES = ['./', 'index.html', 'css/styles.css', 'js/app.js', 'js/store.js', 'js/dates.js', 'js/icons.js', 'js/ui.js',
-  'js/components.js', 'js/forms.js', 'js/capture.js', 'js/parse.js', 'js/voice.js', 'js/themes.js', 'js/views/appearance.js', 'js/views/today.js', 'js/views/calendar.js', 'js/views/tasks.js', 'js/views/apps.js',
+  'js/components.js', 'js/forms.js', 'js/capture.js', 'js/parse.js', 'js/voice.js', 'js/themes.js', 'js/planner.js', 'js/life.js', 'js/views/plan.js', 'js/views/life.js', 'js/views/appearance.js', 'js/views/today.js', 'js/views/calendar.js', 'js/views/tasks.js', 'js/views/apps.js',
   'js/views/settings.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {

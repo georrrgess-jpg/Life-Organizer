@@ -4,7 +4,8 @@ import { GLYPHS } from './icons.js';
 
 const KEY = 'evenday:data:v1';
 const BACKUP_KEY = 'evenday:backup:v1';
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
+const PRE_V2_BACKUP_KEY = 'evenday:backup:pre-v2';
 
 export const CATEGORIES = {
   personal: 'Personal',
@@ -15,6 +16,8 @@ export const CATEGORIES = {
 export const TASK_CATEGORIES = ['personal', 'work', 'school'];
 export const PRIORITIES = { low: 'Low', normal: 'Normal', high: 'High' };
 export const TILE_COLORS = ['teal', 'blue', 'violet', 'rose', 'amber', 'slate'];
+export const ESTIMATES = [15, 30, 45, 60, 90, 120];
+const DEFAULT_ESTIMATE = { high: 60, normal: 30, low: 15 };
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
 const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
@@ -33,6 +36,9 @@ export function cleanTask(t) {
     due: isValidKey(t.due) ? t.due : null,
     priority: t.priority in PRIORITIES ? t.priority : 'normal',
     category: TASK_CATEGORIES.includes(t.category) ? t.category : null,
+    // v2: planning estimate in minutes (older tasks get a default from their priority)
+    estimate: ESTIMATES.includes(t.estimate) ? t.estimate : DEFAULT_ESTIMATE[t.priority in PRIORITIES ? t.priority : 'normal'],
+    goalId: str(t.goalId, 64) || null,
     done: t.done === true,
     completedAt: t.done === true && typeof t.completedAt === 'string' ? t.completedAt : t.done === true ? nowIso() : null,
     createdAt: typeof t.createdAt === 'string' ? t.createdAt : nowIso(),
@@ -115,8 +121,73 @@ export function cleanShortcut(s) {
 }
 
 const oneOf = (v, list, d) => (list.includes(v) ? v : d);
-const TODAY_SECTIONS = ['capture', 'upNext', 'tasks', 'schedule', 'favorites'];
+const TODAY_SECTIONS = ['capture', 'plan', 'upNext', 'tasks', 'habits', 'schedule', 'favorites'];
 export const THEME_DEFAULTS = { preset: 'evenday', accent: 'teal', trueBlack: false, font: 'system', textSize: 'm', radius: 'soft', density: 'comfy', motion: 'full' };
+
+const num = (v, min, max, d) => (Number.isFinite(Number(v)) ? Math.min(max, Math.max(min, Math.round(Number(v)))) : d);
+
+export function cleanGoal(g) {
+  if (!g || typeof g !== 'object') return null;
+  const title = str(g.title, 120);
+  if (!title) return null;
+  const kind = g.kind === 'tasks' ? 'tasks' : 'count';
+  return {
+    id: str(g.id, 64) || uid(),
+    title,
+    kind,
+    target: num(g.target, 1, 100000, 10),
+    current: num(g.current, 0, 1000000, 0),
+    unit: str(g.unit, 24),
+    due: isValidKey(g.due) ? g.due : null,
+    color: TILE_COLORS.includes(g.color) ? g.color : 'teal',
+    createdAt: typeof g.createdAt === 'string' ? g.createdAt : nowIso(),
+    completedAt: typeof g.completedAt === 'string' ? g.completedAt : null,
+    demo: g.demo === true,
+  };
+}
+
+export function cleanHabit(h) {
+  if (!h || typeof h !== 'object') return null;
+  const title = str(h.title, 80);
+  if (!title) return null;
+  const days = [...new Set((Array.isArray(h.days) ? h.days : []).map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort();
+  const log = {};
+  if (h.log && typeof h.log === 'object') for (const k of Object.keys(h.log)) if (isValidKey(k) && h.log[k] === true) log[k] = true;
+  return {
+    id: str(h.id, 64) || uid(),
+    title,
+    days: days.length ? days : [0, 1, 2, 3, 4, 5, 6],
+    color: TILE_COLORS.includes(h.color) ? h.color : 'teal',
+    log,
+    createdAt: typeof h.createdAt === 'string' ? h.createdAt : nowIso(),
+    demo: h.demo === true,
+  };
+}
+
+export function cleanPlan(p) {
+  if (!p || typeof p !== 'object' || !isValidKey(p.date)) return null;
+  const blocks = (Array.isArray(p.blocks) ? p.blocks : [])
+    .filter((b) => b && typeof b.taskId === 'string' && isValidTime(b.start) && isValidTime(b.end) && toMinutes(b.end) > toMinutes(b.start))
+    .map((b) => ({ taskId: b.taskId.slice(0, 64), start: b.start, end: b.end, locked: b.locked === true }));
+  return {
+    date: p.date,
+    blocks,
+    skipped: (Array.isArray(p.skipped) ? p.skipped : []).filter((x) => typeof x === 'string').slice(0, 500),
+    generatedAt: typeof p.generatedAt === 'string' ? p.generatedAt : nowIso(),
+  };
+}
+
+function cleanPlans(plans) {
+  const out = {};
+  const cutoff = addDays(todayKey(), -30);
+  if (plans && typeof plans === 'object') {
+    for (const p of Object.values(plans)) {
+      const c = cleanPlan(p);
+      if (c && c.date >= cutoff) out[c.date] = c;
+    }
+  }
+  return out;
+}
 
 function cleanPrefs(p) {
   p = p && typeof p === 'object' ? p : {};
@@ -136,6 +207,9 @@ function cleanPrefs(p) {
     today: Object.fromEntries(TODAY_SECTIONS.map((k) => [k, today[k] !== false])),
     onboarded: p.onboarded === true,
     swipeTipSeen: p.swipeTipSeen === true,
+    energy: oneOf(p.energy, ['morning', 'afternoon', 'evening'], 'morning'),
+    dayStart: isValidTime(p.dayStart) ? p.dayStart : '08:00',
+    dayEnd: isValidTime(p.dayEnd) && (!isValidTime(p.dayStart) || toMinutes(p.dayEnd) >= toMinutes(p.dayStart) + 60) ? p.dayEnd : (isValidTime(p.dayStart) && toMinutes(p.dayStart) > 20 * 60 ? '23:59' : '21:00'),
   };
 }
 
@@ -153,7 +227,7 @@ function exampleShortcuts() {
 }
 
 function defaults() {
-  return { tasks: [], events: [], shortcuts: exampleShortcuts(), prefs: cleanPrefs() };
+  return { tasks: [], events: [], shortcuts: exampleShortcuts(), goals: [], habits: [], plans: {}, prefs: cleanPrefs() };
 }
 
 export function sampleData(today = todayKey()) {
@@ -179,10 +253,19 @@ export function sampleData(today = todayKey()) {
     { title: 'Project deadline', date: d(5), allDay: true, category: 'work' },
     { title: 'Study group', date: d(6), start: '16:00', end: '17:30', category: 'school', location: 'Library, room 2' },
   ];
-  return {
-    tasks: tasks.map((t) => cleanTask({ ...t, demo: true })),
-    events: events.map((e) => cleanEvent({ ...e, demo: true })),
-  };
+  const logFor = (days, skipEvery) => Object.fromEntries(Array.from({ length: days }, (_, i) => [d(-i - 1), i % skipEvery !== skipEvery - 1]).filter(([, v]) => v));
+  const goals = [
+    { title: 'Read 12 books this year', kind: 'count', target: 12, current: 9, unit: 'books', due: `${today.slice(0, 4)}-12-31`, color: 'violet' },
+    { title: 'Ace the chemistry final', kind: 'tasks', target: 1, due: d(20), color: 'amber' },
+  ].map((g) => cleanGoal({ ...g, demo: true, createdAt: new Date(Date.now() - 60 * 864e5).toISOString() }));
+  const tasksOut = tasks.map((t) => cleanTask({ ...t, demo: true }));
+  for (const t of tasksOut) if (t.category === 'school') t.goalId = goals[1].id;
+  const habits = [
+    { title: 'Drink water', color: 'blue', log: logFor(20, 7) },
+    { title: 'Read 20 minutes', color: 'violet', log: logFor(12, 5) },
+    { title: 'Workout', days: [1, 3, 5], color: 'rose', log: Object.fromEntries(Object.keys(logFor(28, 9)).filter((k) => [1, 3, 5].includes(new Date(`${k}T12:00`).getDay())).map((k) => [k, true])) },
+  ].map((h) => cleanHabit({ ...h, demo: true, createdAt: new Date(Date.now() - 40 * 864e5).toISOString() }));
+  return { tasks: tasksOut, events: events.map((e) => cleanEvent({ ...e, demo: true })), goals, habits };
 }
 
 // ---------- Store ----------
@@ -190,6 +273,8 @@ export function sampleData(today = todayKey()) {
 let state = defaults();
 let storageOk = true;
 let firstRun = false;
+let loadError = false;
+export const hadLoadError = () => loadError;
 const listeners = new Set();
 
 function read(key) {
@@ -199,20 +284,34 @@ function write(key, value) {
   try { localStorage.setItem(key, value); return true; } catch { return false; }
 }
 
-function fromRaw(raw) {
-  const data = JSON.parse(raw);
+const arr = (v) => (Array.isArray(v) ? v : []);
+function fromData(data) {
   return {
-    tasks: (data.tasks || []).map(cleanTask).filter(Boolean),
-    events: (data.events || []).map(cleanEvent).filter(Boolean),
-    shortcuts: (data.shortcuts || []).map(cleanShortcut).filter(Boolean),
+    tasks: arr(data.tasks).map(cleanTask).filter(Boolean),
+    events: arr(data.events).map(cleanEvent).filter(Boolean),
+    shortcuts: arr(data.shortcuts).map(cleanShortcut).filter(Boolean),
+    goals: arr(data.goals).map(cleanGoal).filter(Boolean),
+    habits: arr(data.habits).map(cleanHabit).filter(Boolean),
+    plans: cleanPlans(data.plans),
     prefs: cleanPrefs(data.prefs),
   };
 }
+const fromRaw = (raw) => fromData(JSON.parse(raw));
 
 export function load() {
   const raw = read(KEY);
   if (raw) {
-    try { state = fromRaw(raw); } catch { state = defaults(); }
+    try {
+      const data = JSON.parse(raw);
+      // Keep an untouched copy of older data before migrating it to the new format.
+      if ((data.version || 1) < SCHEMA_VERSION && !read(PRE_V2_BACKUP_KEY)) write(PRE_V2_BACKUP_KEY, raw);
+      state = fromData(data);
+    } catch {
+      // Unreadable data is never overwritten silently: keep the raw text so it can be recovered.
+      write(`evenday:unreadable:${Date.now()}`, raw);
+      state = defaults();
+      loadError = true;
+    }
   } else {
     firstRun = true;
     state = defaults();
@@ -291,22 +390,91 @@ export function moveShortcut(id, delta) {
 }
 export function deleteShortcut(id) { state.shortcuts = state.shortcuts.filter((s) => s.id !== id); commit(); }
 
+// Goals
+export function saveGoal(data) {
+  const existing = state.goals.find((g) => g.id === data.id);
+  const goal = cleanGoal({ ...existing, ...data, demo: existing ? existing.demo : false });
+  if (!goal) return null;
+  state.goals = existing ? state.goals.map((g) => (g.id === goal.id ? goal : g)) : [...state.goals, goal];
+  commit();
+  return goal;
+}
+export function logGoal(id, delta) {
+  state.goals = state.goals.map((g) => {
+    if (g.id !== id) return g;
+    const current = Math.max(0, g.current + delta);
+    const done = current >= g.target;
+    return { ...g, current, completedAt: done ? g.completedAt || nowIso() : null };
+  });
+  commit();
+}
+export function setGoalComplete(id, done) {
+  state.goals = state.goals.map((g) => (g.id === id ? { ...g, completedAt: done ? nowIso() : null } : g));
+  commit();
+}
+export function deleteGoal(id) {
+  state.goals = state.goals.filter((g) => g.id !== id);
+  state.tasks = state.tasks.map((t) => (t.goalId === id ? { ...t, goalId: null } : t));
+  commit();
+}
+
+// Habits
+export function saveHabit(data) {
+  const existing = state.habits.find((h) => h.id === data.id);
+  const habit = cleanHabit({ ...existing, ...data, log: data.log || existing?.log, demo: existing ? existing.demo : false });
+  if (!habit) return null;
+  state.habits = existing ? state.habits.map((h) => (h.id === habit.id ? habit : h)) : [...state.habits, habit];
+  commit();
+  return habit;
+}
+export function toggleHabit(id, date) {
+  state.habits = state.habits.map((h) => {
+    if (h.id !== id) return h;
+    const log = { ...h.log };
+    if (log[date]) delete log[date]; else log[date] = true;
+    return { ...h, log };
+  });
+  commit();
+}
+export function deleteHabit(id) { state.habits = state.habits.filter((h) => h.id !== id); commit(); }
+
+// Plans (one per day)
+export function savePlan(plan) {
+  const p = cleanPlan(plan);
+  if (!p) return null;
+  state.plans = { ...state.plans, [p.date]: p };
+  commit();
+  return p;
+}
+export function clearPlan(date) {
+  const plans = { ...state.plans };
+  delete plans[date];
+  state.plans = plans;
+  commit();
+}
+
 // Preferences
 export function setPref(key, value) { state.prefs = cleanPrefs({ ...state.prefs, [key]: value }); commit(); }
 export function setPrefs(patch) { state.prefs = cleanPrefs({ ...state.prefs, ...patch }); commit(); }
 
 // Sample data
-export const hasSampleData = () => state.tasks.some((t) => t.demo) || state.events.some((e) => e.demo);
+export const hasSampleData = () => ['tasks', 'events', 'goals', 'habits'].some((k) => state[k].some((x) => x.demo));
 export function loadSampleData() {
   clearSampleData(false);
   const s = sampleData();
   state.tasks = [...state.tasks, ...s.tasks];
   state.events = [...state.events, ...s.events];
+  state.goals = [...state.goals, ...s.goals];
+  state.habits = [...state.habits, ...s.habits];
   commit();
 }
 export function clearSampleData(save = true) {
   state.tasks = state.tasks.filter((t) => !t.demo);
   state.events = state.events.filter((e) => !e.demo);
+  const demoGoals = new Set(state.goals.filter((g) => g.demo).map((g) => g.id));
+  state.goals = state.goals.filter((g) => !g.demo);
+  state.habits = state.habits.filter((h) => !h.demo);
+  state.tasks = state.tasks.map((t) => (demoGoals.has(t.goalId) ? { ...t, goalId: null } : t));
   if (save) commit();
 }
 
@@ -328,18 +496,12 @@ export function parseImport(text) {
   const data = parsed && parsed.app === 'evenday' ? parsed.data : null;
   if (!data || typeof data !== 'object') throw new Error('This file wasn’t exported from Evenday.');
   if (parsed.version > SCHEMA_VERSION) throw new Error('This file comes from a newer version of Evenday.');
-  for (const k of ['tasks', 'events', 'shortcuts']) {
+  for (const k of ['tasks', 'events', 'shortcuts', 'goals', 'habits']) {
     if (data[k] !== undefined && !Array.isArray(data[k])) throw new Error(`The “${k}” section is damaged.`);
   }
-  const pick = (k, fn) => (data[k] || []).map(fn).filter(Boolean);
-  const result = {
-    tasks: pick('tasks', cleanTask),
-    events: pick('events', cleanEvent),
-    shortcuts: pick('shortcuts', cleanShortcut),
-    prefs: cleanPrefs(data.prefs),
-  };
-  const total = ['tasks', 'events', 'shortcuts'].reduce((n, k) => n + (data[k] || []).length, 0);
-  result.skipped = total - result.tasks.length - result.events.length - result.shortcuts.length;
+  const result = fromData(data);
+  const keys = ['tasks', 'events', 'shortcuts', 'goals', 'habits'];
+  result.skipped = keys.reduce((n, k) => n + arr(data[k]).length - result[k].length, 0);
   return result;
 }
 

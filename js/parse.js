@@ -90,10 +90,12 @@ export function parseItem(chunk, { now = new Date(), dayFirst = false } = {}) {
 
   // Duration: "for 30 min", "for 2 hours", "for an hour"
   let duration = 60;
+  let hadDuration = false;
   take(/\bfor\s+(\d+(?:\.\d+)?|an?|half an?|one|two|three)\s*(h|hrs?|hours?|m|mins?|minutes?)\b/i, (m) => {
     const n = /half/i.test(m[1]) ? 0.5 : NUM[m[1].toLowerCase()] ?? Number(m[1]);
     duration = Math.round(/^h/i.test(m[2]) ? n * 60 : n);
     if (!duration) return false;
+    hadDuration = true;
   });
 
   // Dates
@@ -190,6 +192,7 @@ export function parseItem(chunk, { now = new Date(), dayFirst = false } = {}) {
   if (!title) return null;
   out.title = title[0].toUpperCase() + title.slice(1);
 
+  if (out.kind === 'task' && hadDuration) out.estimate = [15, 30, 45, 60, 90, 120].reduce((a, b) => (Math.abs(b - duration) < Math.abs(a - duration) ? b : a));
   if (!out.category) out.category = (CATEGORY_HINTS.find(([, re]) => re.test(out.title)) || [null])[0];
   if (out.kind === 'task' && out.category === 'social') out.category = 'personal';
   return out;

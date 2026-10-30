@@ -94,8 +94,10 @@ export function openThemeSheet() {
 
 const SECTIONS = [
   ['capture', 'wand', 'accent', 'Quick add bar', 'Type or speak at the top of Today'],
+  ['plan', 'wand', 'violet', 'Plan My Day', 'Your plan’s progress, or a one-tap plan'],
   ['upNext', 'clock', 'blue', 'Up next', 'Your next event, front and center'],
   ['tasks', 'tasks', 'accent', 'Tasks', 'Due today and overdue'],
+  ['habits', 'flame', 'amber', 'Habits', 'Check off today’s habits'],
   ['schedule', 'calendar', 'red', 'Schedule', 'Today’s events and what’s coming'],
   ['favorites', 'star', 'amber', 'Favorites', 'Your starred shortcuts'],
 ];

@@ -2,6 +2,9 @@ import { addDays, formatDate, formatTime, greeting, todayKey, toMinutes } from '
 import { captureBar, emptyState, eventRow, pageHeader, sortEvents, taskRow, tileIcon } from '../components.js';
 import { hasSampleData, isFirstRun } from '../store.js';
 import { esc } from '../ui.js';
+import { buildPlan, formatDuration, rankTasks } from '../planner.js';
+import { habitRow } from './life.js';
+import { isScheduled } from '../life.js';
 import { icon } from '../icons.js';
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -43,7 +46,7 @@ export function renderToday(state) {
   const showSample = !hasSampleData() && !state.tasks.length && !state.events.length;
 
   return `
-  ${pageHeader({ title: greeting(now) + (state.prefs.name ? `, ${state.prefs.name}` : ''), actions: `<button type="button" class="nav-btn" data-action="open-today-custom">Edit</button>`, eyebrow: formatDate(today, { weekday: 'long', month: 'long', day: 'numeric' }), summary: esc(summary) })}
+  ${pageHeader({ title: greeting(now) + (state.prefs.name ? `, ${state.prefs.name}` : ''), actions: `<a class="btn-icon mobile-only" href="#apps" aria-label="App wall">${icon('grid')}</a><button type="button" class="nav-btn" data-action="open-today-custom">Edit</button>`, eyebrow: formatDate(today, { weekday: 'long', month: 'long', day: 'numeric' }), summary: esc(summary) })}
   ${show.capture ? captureBar() : ''}
 
   ${showSample ? `<div class="callout">
@@ -52,6 +55,8 @@ export function renderToday(state) {
     <p class="muted small">Type or say what you need to do above, or look around with sample data.</p></div>
     <button type="button" class="btn btn-secondary btn-sm" data-action="load-sample">Load sample data</button>
   </div>` : ''}
+
+  ${show.plan ? planCard(state, today, nowMin) : ''}
 
   ${show.upNext && next ? `<button type="button" class="up-next" data-action="view-event" data-id="${next.id}">
     <span class="up-next-label">${toMinutes(next.start) <= nowMin ? 'Happening now' : 'Up next'}</span>
@@ -74,6 +79,13 @@ export function renderToday(state) {
         ? emptyState('tasks', doneToday ? 'All done for today' : 'Nothing due today', doneToday ? 'Nice work. Everything due today is finished.' : 'Tasks due today and anything overdue show up here.')
         : ''}
       ${doneToday ? `<p class="done-note">${icon('check')}${plural(doneToday, 'task')} completed today</p>` : ''}
+    </section>` : ''}
+
+    ${show.habits && state.habits.some((h) => isScheduled(h, today) || h.log[today]) ? `<section class="card section" aria-labelledby="h-today-habits">
+      <div class="section-head"><h2 id="h-today-habits">Habits</h2>
+        <span class="progress">${state.habits.filter((h) => h.log[today]).length}/${state.habits.filter((h) => isScheduled(h, today) || h.log[today]).length}</span>
+        <a class="link" href="#life">Life</a></div>
+      <ul class="habit-list">${state.habits.filter((h) => isScheduled(h, today) || h.log[today]).map((h) => habitRow(h, today, { compact: true })).join('')}</ul>
     </section>` : ''}
 
     ${show.schedule ? `<section class="card section" aria-labelledby="h-schedule">
@@ -101,3 +113,28 @@ export function renderToday(state) {
 }
 
 const eventTime = (e) => `${formatTime(e.start)} – ${formatTime(e.end)}`;
+
+// Today's plan at a glance, or an invitation to make one.
+function planCard(state, today, nowMin) {
+  const plan = state.plans[today];
+  const byId = Object.fromEntries(state.tasks.map((t) => [t.id, t]));
+  if (!plan) {
+    const ready = rankTasks(state.tasks, today, []);
+    if (!ready.length) return '';
+    const p = buildPlan({ date: today, tasks: state.tasks, events: state.events, prefs: state.prefs, nowMin });
+    return `<section class="plan-cta">
+      <span class="plan-cta-icon">${icon('wand')}</span>
+      <div><p class="plan-cta-title">Plan my day</p>
+      <p class="plan-cta-text">${p.blocks.length ? `${p.blocks.length} of ${ready.length} task${ready.length === 1 ? '' : 's'} fit in ${formatDuration(p.plannedMinutes)} around your events` : 'No free time left today. Plan tomorrow instead?'}</p></div>
+      <button type="button" class="btn btn-primary btn-sm" data-action="plan-generate">Plan</button>
+    </section>`;
+  }
+  const blocks = plan.blocks.filter((b) => byId[b.taskId]);
+  const done = blocks.filter((b) => byId[b.taskId].done).length;
+  const nextB = blocks.find((b) => !byId[b.taskId].done && toMinutes(b.end) > nowMin);
+  return `<button type="button" class="plan-mini" data-action="open-plan">
+    <span class="plan-mini-head"><span class="up-next-label">Today’s plan</span><span class="plan-mini-count">${done}/${blocks.length}</span></span>
+    <span class="goal-bar"><span style="width:${blocks.length ? Math.round((done / blocks.length) * 100) : 0}%"></span></span>
+    <span class="plan-mini-next">${nextB ? `${toMinutes(nextB.start) <= nowMin ? 'Now' : esc(formatTime(nextB.start))} · ${esc(byId[nextB.taskId].title)}` : done === blocks.length && blocks.length ? 'Everything planned is done' : 'Open your plan'}</span>
+  </button>`;
+}

@@ -28,7 +28,7 @@ export function renderCalendar(state, ui) {
   }).join('');
 
   return `
-  ${pageHeader({ title: 'Calendar', actions: `<button type="button" class="nav-btn nav-primary" data-action="cal-today" ${sel === today ? 'disabled' : ''}>Today</button>` })}
+  ${pageHeader({ title: 'Calendar', actions: `<button type="button" class="nav-btn" data-action="open-plan">Plan</button><button type="button" class="nav-btn nav-primary" data-action="cal-today" ${sel === today ? 'disabled' : ''}>Today</button>` })}
   <div class="cal-layout">
     <section class="card cal" aria-label="Month">
       <div class="cal-nav">

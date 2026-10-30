@@ -81,6 +81,7 @@ export function openCapture({ due = todayKey(), listenNow = false } = {}) {
         isEvent ? (d.allDay ? 'All day' : `${esc(formatTime(d.start))} – ${esc(formatTime(d.end))}`) : '',
         d.notes ? esc(d.notes) : '',
         d.priority === 'high' ? `<span class="prio-high">${icon('flag')}High</span>` : d.priority === 'low' ? 'Low priority' : '',
+        !isEvent && d.estimate ? `${icon('clock')}${d.estimate} min` : '',
         d.category ? catLabel(d.category) : '',
         d.location ? `${icon('pin')}${esc(d.location)}` : '',
       ].filter(Boolean);
@@ -169,7 +170,7 @@ export function openCapture({ due = todayKey(), listenNow = false } = {}) {
     for (const d of list) {
       if (d.kind === 'event') {
         if (store.saveEvent({ title: d.title, date: d.date || fallbackDate(), allDay: d.allDay, start: d.start, end: d.end, location: d.location, notes: d.notes, category: d.category })) events++;
-      } else if (store.saveTask({ title: d.title, due: d.date ?? due, priority: d.priority, category: d.category, notes: d.notes })) tasks++;
+      } else if (store.saveTask({ title: d.title, due: d.date ?? due, priority: d.priority, category: d.category, notes: d.notes, estimate: d.estimate })) tasks++;
     }
     closeSheet(dlg);
     const parts = [tasks && plural(tasks, 'task'), events && plural(events, 'event')].filter(Boolean);

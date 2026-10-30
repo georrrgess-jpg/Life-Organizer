@@ -13,12 +13,16 @@ import { renderCalendar, calendarKey } from './views/calendar.js';
 import { renderTasks } from './views/tasks.js';
 import { renderApps } from './views/apps.js';
 import { confirmReset, openExport, openImport, renderSettings } from './views/settings.js';
+import { carryOver, generatePlan, openBlockSheet, openPlanHours, planDate, renderPlan } from './views/plan.js';
+import { celebrate, openGoalForm, openHabitForm, renderLife } from './views/life.js';
 
 const ROUTES = {
   today: { label: 'Today', icon: 'today', render: renderToday },
   calendar: { label: 'Calendar', icon: 'calendar', render: renderCalendar },
+  plan: { label: 'Plan', icon: 'wand', render: renderPlan, desktopOnly: true },
   tasks: { label: 'Tasks', icon: 'tasks', render: renderTasks },
-  apps: { label: 'Apps', icon: 'grid', render: renderApps },
+  life: { label: 'Life', icon: 'life', render: renderLife },
+  apps: { label: 'Apps', icon: 'grid', render: renderApps, desktopOnly: true },
   preferences: { label: 'Settings', icon: 'settings', render: renderSettings, hidden: true },
 };
 
@@ -29,20 +33,23 @@ const ui = {
   calMonth: { year: now.getFullYear(), month: now.getMonth() },
   taskTab: 'today',
   appsEdit: false,
+  planDay: 'today',
+  heatDay: null,
+  fresh: true,
   day: todayKey(),
 };
 
 let main;
 
 function shell() {
-  const item = (key) => `<a href="#${key}" class="nav-item${ROUTES[key].hidden ? ' nav-secondary' : ''}" data-nav="${key}">${icon(ROUTES[key].icon)}<span>${ROUTES[key].label}</span></a>`;
+  const item = (key) => `<a href="#${key}" class="nav-item${ROUTES[key].hidden ? ' nav-secondary' : ''}${ROUTES[key].desktopOnly ? ' nav-desktop' : ''}" data-nav="${key}">${icon(ROUTES[key].icon)}<span>${ROUTES[key].label}</span></a>`;
   document.getElementById('app').innerHTML = `
     <a class="skip-link" href="#main">Skip to content</a>
     <nav class="nav" aria-label="Main">
       <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Evenday</div>
-      ${item('today')}${item('calendar')}
+      ${item('today')}${item('plan')}${item('calendar')}
       <button type="button" class="nav-add" data-action="quick-add" aria-label="Quick add a task or event" title="Quick add (N)">${icon('plus')}<span>Quick add</span></button>
-      ${item('tasks')}${item('apps')}${item('preferences')}
+      ${item('tasks')}${item('life')}${item('apps')}${item('preferences')}
     </nav>
     <main id="main" tabindex="-1"></main>
     <div id="storage-warning" class="banner" role="alert" hidden>${icon('alert')}<span>This browser isn’t saving data (private mode or storage is blocked). Changes will be lost when you close the page.</span></div>`;
@@ -57,7 +64,10 @@ function render() {
   const state = store.getState();
   const focusKey = document.activeElement?.dataset?.focus;
   const draft = main.querySelector('.quick-task input')?.value;
-  main.innerHTML = `<div class="page page-${ui.route}">${ROUTES[ui.route].render(state, ui)}</div>`;
+  // Entrance animations only play when a screen first opens, not on every update.
+  const fresh = ui.fresh;
+  ui.fresh = false;
+  main.innerHTML = `<div class="page page-${ui.route}${fresh ? ' fresh' : ''}">${ROUTES[ui.route].render(state, ui)}</div>`;
   document.querySelectorAll('[data-nav]').forEach((a) => {
     if (a.dataset.nav === ui.route) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
@@ -72,7 +82,7 @@ function route() {
   const key = location.hash.slice(1);
   const next = ROUTES[key] ? key : 'today';
   const changed = next !== ui.route;
-  if (changed) ui.prevRoute = ui.route;
+  if (changed) { ui.prevRoute = ui.route; ui.fresh = true; ui.heatDay = null; }
   ui.route = next;
   if (changed) ui.appsEdit = false;
   render();
@@ -118,7 +128,7 @@ function toggleTask(btn) {
     toast(done ? `Completed “${task.title}”` : `Reopened “${task.title}”`, { actionLabel: 'Undo', onAction: () => store.restore(snap) });
   };
   if (done && !reducedMotion()) {
-    btn.closest('.task-row')?.classList.add('completing');
+    btn.closest('.task-row, .tl-item')?.classList.add('completing');
     btn.setAttribute('aria-checked', 'true');
     setTimeout(finish, 420);
   } else finish();
@@ -143,6 +153,50 @@ const actions = {
   'quick-add': () => openCapture({ due: contextDue() }),
   'quick-voice': () => openCapture({ due: contextDue(), listenNow: true }),
   'capture-help': openCaptureHelp,
+  // Plan My Day
+  'plan-day': (el) => { ui.planDay = el.dataset.day; ui.fresh = true; render(); },
+  'plan-energy': (el) => store.setPref('energy', el.dataset.value),
+  'plan-hours': openPlanHours,
+  'plan-generate': () => {
+    const date = planDate(ui);
+    const r = generatePlan(date);
+    ui.fresh = true;
+    if (ui.route !== 'plan') location.hash = 'plan'; else render();
+    const n = r.blocks.length;
+    toast(n ? `Planned ${n} task${n > 1 ? 's' : ''}${r.unplaced.length ? `, ${r.unplaced.length} didn’t fit` : ''}` : 'Nothing to plan right now');
+  },
+  'plan-clear': async () => {
+    if (!await confirmDialog({ title: 'Clear this plan?', message: 'Your tasks stay as they are. Only the time blocks are removed.', confirmLabel: 'Clear plan' })) return;
+    const snap = store.snapshot();
+    store.clearPlan(planDate(ui));
+    toast('Plan cleared', { actionLabel: 'Undo', onAction: () => store.restore(snap) });
+  },
+  'plan-toggle': toggleTask,
+  'plan-block': (el) => openBlockSheet(el.dataset.id, planDate(ui)),
+  'plan-carry': (el) => carryOver(el.dataset.ids.split(',').filter(Boolean), planDate(ui)),
+  'open-plan': () => { ui.planDay = 'today'; location.hash = 'plan'; },
+  // Life
+  'nav-life': () => { location.hash = 'life'; },
+  'habit-toggle': (el) => {
+    const id = el.dataset.id;
+    const h = store.getState().habits.find((x) => x.id === id);
+    if (!h) return;
+    const wasDone = Boolean(h.log[todayKey()]);
+    store.toggleHabit(id, todayKey());
+    if (!wasDone) main.querySelectorAll(`[data-habit="${id}"]`).forEach((r) => r.classList.add('just-done'));
+  },
+  'habit-new': () => openHabitForm(null),
+  'habit-edit': (el) => openHabitForm(store.getState().habits.find((h) => h.id === el.dataset.id)),
+  'goal-new': () => openGoalForm(null),
+  'goal-edit': (el) => openGoalForm(store.getState().goals.find((g) => g.id === el.dataset.id)),
+  'goal-log': (el) => {
+    const id = el.dataset.id;
+    store.logGoal(id, Number(el.dataset.delta));
+    const g = store.getState().goals.find((x) => x.id === id);
+    if (g?.completedAt && Number(el.dataset.delta) > 0) celebrate(id);
+  },
+  'goal-add-task': (el) => openTaskForm(null, { goalId: el.dataset.id, due: null }),
+  'heat-day': (el) => { ui.heatDay = ui.heatDay === el.dataset.date ? null : el.dataset.date; render(); },
   'open-themes': openThemeSheet,
   'open-today-custom': openTodaySheet,
   'dismiss-swipe-tip': () => store.setPref('swipeTipSeen', true),
@@ -211,7 +265,7 @@ function bindEvents() {
       const ev = store.saveEvent({ ...d, date: d.date || form.dataset.due || todayKey() });
       toast(`Added event “${ev.title}”`, { actionLabel: 'Edit', onAction: () => openEventForm(store.getState().events.find((x) => x.id === ev.id)) });
     } else {
-      const t = store.saveTask({ title: d.title, due: d.date ?? (form.dataset.due || null), priority: d.priority, category: d.category, notes: d.notes });
+      const t = store.saveTask({ title: d.title, due: d.date ?? (form.dataset.due || null), priority: d.priority, category: d.category, notes: d.notes, estimate: d.estimate });
       toast(`Added “${t.title}”`, { actionLabel: 'Edit', onAction: () => openTaskForm(store.getState().tasks.find((x) => x.id === t.id)) });
     }
     main.querySelector('.quick-task input')?.focus();

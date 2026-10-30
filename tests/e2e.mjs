@@ -266,6 +266,103 @@ await step('Settings opens from the top bar and Back returns to the same tab', a
   await page.waitForSelector('.page-tasks');
 });
 
+await step('Plan My Day: one tap from Today builds a timeline around events', async () => {
+  await go('today');
+  // Make sure there are tasks due today with known lengths.
+  await page.click('.nav-add');
+  await page.fill('#capture-text', 'Write report for 90 min !, call bank for 15 min, tidy desk');
+  await page.click('dialog .nav-primary');
+  await page.waitForSelector('dialog', { state: 'detached' });
+  const t = (await state()).tasks.find((x) => x.title === 'Write report');
+  assert.equal(t.estimate, 90);
+  await page.click('.plan-cta [data-action="plan-generate"]');
+  await page.waitForSelector('.page-plan .timeline');
+  const s = await state();
+  const plan = s.plans[today];
+  assert.ok(plan.blocks.length >= 3, 'blocks created');
+  const toMin = (x) => +x.slice(0, 2) * 60 + +x.slice(3);
+  for (const b of plan.blocks) for (const e of s.events.filter((ev) => ev.date === today && !ev.allDay)) {
+    assert.ok(!(toMin(b.start) < toMin(e.end) && toMin(e.start) < toMin(b.end)), 'no clash with events');
+  }
+  assert.ok(await page.locator('.tl-task').count() >= 3);
+});
+
+await step('Plan: complete a block, change its length, lock it, move one to tomorrow', async () => {
+  const id = (await state()).tasks.find((x) => x.title === 'Tidy desk').id;
+  await page.click(`[data-action="plan-toggle"][data-id="${id}"]`);
+  await page.waitForTimeout(600);
+  assert.equal((await state()).tasks.find((x) => x.id === id).done, true);
+  assert.match(await page.textContent('.plan-summary-title'), /1 of/);
+  const bank = (await state()).tasks.find((x) => x.title === 'Call bank').id;
+  await page.click(`[data-action="plan-block"][data-id="${bank}"]`);
+  await page.click('dialog [data-estimate="45"]');
+  await page.waitForSelector('dialog', { state: 'detached' });
+  let b = (await state()).plans[today].blocks.find((x) => x.taskId === bank);
+  assert.equal(+b.end.slice(0, 2) * 60 + +b.end.slice(3) - (+b.start.slice(0, 2) * 60 + +b.start.slice(3)), 45);
+  await page.click(`[data-action="plan-block"][data-id="${bank}"]`);
+  await page.click('dialog label[for="block-lock"]');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('dialog', { state: 'detached' });
+  b = (await state()).plans[today].blocks.find((x) => x.taskId === bank);
+  assert.equal(b.locked, true);
+  await page.click('[data-action="plan-generate"] >> nth=0');
+  assert.equal((await state()).plans[today].blocks.find((x) => x.taskId === bank).start, b.start, 'locked block kept its time');
+  const report = (await state()).tasks.find((x) => x.title === 'Write report').id;
+  await page.click(`[data-action="plan-block"][data-id="${report}"]`);
+  await page.click('dialog [data-do="tomorrow"]');
+  await page.waitForSelector('dialog', { state: 'detached' });
+  const s = await state();
+  assert.equal(s.tasks.find((x) => x.id === report).due, tomorrow);
+  assert.ok(!s.plans[today].blocks.some((x) => x.taskId === report));
+  await page.click('[data-action="plan-day"][data-day="tomorrow"]');
+  await page.click('[data-action="plan-generate"]');
+  assert.ok((await state()).plans[tomorrow].blocks.some((x) => x.taskId === report), 'planned for tomorrow');
+  await page.click('[data-action="plan-day"][data-day="today"]');
+});
+
+await step('Life: add a habit, check it off, streak shows; habits appear on Today', async () => {
+  await go('life');
+  await page.click('[data-action="habit-new"] >> nth=0');
+  await page.fill('#habit-title', 'Stretch');
+  await page.click('dialog button[type="submit"]');
+  await page.waitForSelector('dialog', { state: 'detached' });
+  const h = (await state()).habits.find((x) => x.title === 'Stretch');
+  await page.click(`[data-action="habit-toggle"][data-id="${h.id}"]`);
+  assert.equal((await state()).habits.find((x) => x.id === h.id).log[today], true);
+  await page.locator(`[data-habit="${h.id}"] .streak`).waitFor();
+  await go('today');
+  await page.click(`section:has(#h-today-habits) [data-action="habit-toggle"][data-id="${h.id}"]`);
+  assert.equal((await state()).habits.find((x) => x.id === h.id).log[today], undefined, 'unchecked from Today');
+});
+
+await step('Life: count goal reaches its target; task goal tracks linked tasks', async () => {
+  await go('life');
+  await page.click('[data-action="goal-new"] >> nth=0');
+  await page.fill('#goal-title', 'Run 3 times');
+  await page.fill('#goal-target', '2');
+  await page.click('dialog button[type="submit"]');
+  await page.waitForSelector('dialog', { state: 'detached' });
+  const g = (await state()).goals.find((x) => x.title === 'Run 3 times');
+  await page.click(`[data-action="goal-log"][data-id="${g.id}"][data-delta="1"]`);
+  await page.click(`[data-action="goal-log"][data-id="${g.id}"][data-delta="1"]`);
+  assert.ok((await state()).goals.find((x) => x.id === g.id).completedAt, 'goal completed');
+  await page.click('[data-action="goal-new"] >> nth=0');
+  await page.fill('#goal-title', 'Launch portfolio');
+  await page.click('dialog label.seg:has(input[value="tasks"])');
+  await page.click('dialog button[type="submit"]');
+  await page.waitForSelector('dialog', { state: 'detached' });
+  const g2 = (await state()).goals.find((x) => x.title === 'Launch portfolio');
+  await page.click(`[data-action="goal-add-task"][data-id="${g2.id}"]`);
+  await page.fill('#task-title', 'Pick a domain');
+  await page.click('dialog button[type="submit"]');
+  await page.waitForSelector('dialog', { state: 'detached' });
+  const linked = (await state()).tasks.find((x) => x.title === 'Pick a domain');
+  assert.equal(linked.goalId, g2.id);
+  await page.locator(`[data-goal="${g2.id}"]`, { hasText: '0 of 1 tasks' }).waitFor();
+  await page.click(`[data-action="heat-day"][data-date="${today}"]`);
+  assert.match(await page.textContent('.heat-foot'), /: \d+ task/);
+});
+
 await step('Data persists after reload', async () => {
   await go('today');
   await page.reload();
@@ -281,7 +378,8 @@ await step('Export produces a valid backup', async () => {
   backup = await page.inputValue('#export-text');
   const parsed = JSON.parse(backup);
   assert.equal(parsed.app, 'evenday');
-  assert.equal(parsed.data.tasks.length, 2);
+  assert.equal(parsed.data.tasks.length, (await state()).tasks.length);
+  assert.ok(Array.isArray(parsed.data.goals) && Array.isArray(parsed.data.habits) && parsed.data.plans);
   await page.keyboard.press('Escape');
   await page.waitForSelector('dialog', { state: 'detached' });
 });
@@ -301,16 +399,17 @@ await step('Invalid imports are rejected without changing data', async () => {
 
 await step('Valid import replaces data after confirmation, Undo restores', async () => {
   const mod = JSON.parse(backup);
+  const before = (await state()).tasks.length;
   mod.data.tasks.push({ title: 'Imported task', due: today }, { title: '' });
   await page.click('[data-action="import"]');
   await page.fill('#import-text', JSON.stringify(mod));
   await page.click('dialog .nav-primary');
-  assert.match(await page.textContent('#confirm-msg'), /3 tasks.*1 incomplete item/s);
+  assert.match(await page.textContent('#confirm-msg'), new RegExp(`${before + 1} tasks.*1 incomplete item`, 's'));
   await page.click('dialog [data-confirm]');
   await page.waitForSelector('dialog', { state: 'detached' });
-  assert.equal((await state()).tasks.length, 3);
+  assert.equal((await state()).tasks.length, before + 1);
   await page.click('.toast-action');
-  assert.equal((await state()).tasks.length, 2);
+  assert.equal((await state()).tasks.length, before);
 });
 
 await step('Dark theme applies and persists', async () => {
@@ -376,7 +475,7 @@ await step('No horizontal overflow at phone and desktop widths', async () => {
   await page.click('[data-action="load-sample"]');
   for (const width of [320, 390, 768, 1280]) {
     await page.setViewportSize({ width, height: 900 });
-    for (const r of ['today', 'calendar', 'tasks', 'apps', 'preferences']) {
+    for (const r of ['today', 'plan', 'calendar', 'tasks', 'life', 'apps', 'preferences']) {
       await go(r);
       const over = await page.evaluate(() => Math.max(document.documentElement.scrollWidth - window.innerWidth, document.querySelector('main').scrollWidth - document.querySelector('main').clientWidth));
       assert.ok(over <= 0, `${r} at ${width}px overflows by ${over}px`);
@@ -393,19 +492,21 @@ await step('Move overdue tasks to today', async () => {
   assert.equal(await page.locator('.subhead-warn').count(), 0);
 });
 
+let ownTasks = 0;
 await step('Remove sample data keeps own items', async () => {
   await go('preferences');
+  ownTasks = (await state()).tasks.filter((t) => !t.demo).length;
   await page.click('[data-action="clear-sample"]');
   const s = await state();
-  assert.ok(s.tasks.every((t) => !t.demo) && s.events.every((e) => !e.demo));
-  assert.equal(s.tasks.length, 2);
+  assert.ok(s.tasks.every((t) => !t.demo) && s.events.every((e) => !e.demo) && s.habits.every((h) => !h.demo) && s.goals.every((g) => !g.demo));
+  assert.equal(s.tasks.length, ownTasks);
 });
 
 await step('Reset requires confirmation and erases data', async () => {
   await page.click('[data-action="reset"]');
   await page.click('dialog [data-close]:has-text("Cancel")');
   await page.waitForSelector('dialog', { state: 'detached' });
-  assert.equal((await state()).tasks.length, 2);
+  assert.equal((await state()).tasks.length, ownTasks);
   await page.click('[data-action="reset"]');
   await page.click('dialog [data-confirm]');
   await page.waitForSelector('dialog', { state: 'detached' });
@@ -426,6 +527,35 @@ await step('Page itself never scrolls; only the content area does', async () => 
   assert.ok(r.mainScrolled, 'content area scrolls');
   assert.equal(r.navBottom, 600);
   await page.setViewportSize({ width: 390, height: 844 });
+});
+
+await step('Old (v1) saved data is migrated automatically and backed up', async () => {
+  const p2 = await ctx.newPage();
+  await p2.goto(BASE + '#today');
+  await p2.evaluate(() => {
+    localStorage.clear();
+    localStorage.setItem('evenday:data:v1', JSON.stringify({ version: 1, tasks: [{ id: 'old1', title: 'Old task', due: null, priority: 'high', done: false, createdAt: '2026-01-01T00:00:00Z' }], events: [], shortcuts: [], prefs: { theme: 'light', weekStart: 1 } }));
+  });
+  await p2.reload();
+  await p2.waitForSelector('.page');
+  const r = await p2.evaluate(() => ({ data: JSON.parse(localStorage.getItem('evenday:data:v1')), backup: localStorage.getItem('evenday:backup:pre-v2') }));
+  assert.equal(r.data.version, 2);
+  assert.equal(r.data.tasks[0].title, 'Old task');
+  assert.equal(r.data.tasks[0].estimate, 60, 'high priority default estimate');
+  assert.deepEqual([r.data.goals, r.data.habits, r.data.prefs.weekStart], [[], [], 1]);
+  assert.match(r.backup, /Old task/);
+  await p2.close();
+});
+
+await step('Unreadable saved data is kept, not overwritten', async () => {
+  const p3 = await ctx.newPage();
+  await p3.goto(BASE + '#today');
+  await p3.evaluate(() => { localStorage.clear(); localStorage.setItem('evenday:data:v1', '{broken json'); });
+  await p3.reload();
+  await p3.waitForSelector('.page');
+  const kept = await p3.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('evenday:unreadable:')).map((k) => localStorage.getItem(k)));
+  assert.deepEqual(kept, ['{broken json']);
+  await p3.close();
 });
 
 await step('No runtime errors were logged', async () => {
