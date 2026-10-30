@@ -6,6 +6,8 @@ import { confirmDialog, reducedMotion, toast } from './ui.js';
 import { openEventDetail, openEventForm, openShortcutForm, openTaskForm } from './forms.js';
 import { openCapture, openCaptureHelp } from './capture.js';
 import { parseItem } from './parse.js';
+import { applyAppearance } from './themes.js';
+import { openThemeSheet, openTodaySheet, openWelcome } from './views/appearance.js';
 import { renderToday } from './views/today.js';
 import { renderCalendar, calendarKey } from './views/calendar.js';
 import { renderTasks } from './views/tasks.js';
@@ -48,11 +50,7 @@ function shell() {
 }
 
 function applyTheme() {
-  const t = store.getState().prefs.theme;
-  if (t === 'system') document.documentElement.removeAttribute('data-theme');
-  else document.documentElement.setAttribute('data-theme', t);
-  const dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#111413' : '#f6f6f3');
+  applyAppearance(store.getState().prefs);
 }
 
 function render() {
@@ -145,6 +143,9 @@ const actions = {
   'quick-add': () => openCapture({ due: contextDue() }),
   'quick-voice': () => openCapture({ due: contextDue(), listenNow: true }),
   'capture-help': openCaptureHelp,
+  'open-themes': openThemeSheet,
+  'open-today-custom': openTodaySheet,
+  'dismiss-swipe-tip': () => store.setPref('swipeTipSeen', true),
   'go-back': () => { location.hash = ui.prevRoute && ui.prevRoute !== 'preferences' ? ui.prevRoute : 'today'; },
   'move-overdue': () => {
     const today = todayKey();
@@ -310,6 +311,7 @@ function start() {
   bindEvents();
   store.subscribe(render);
   route();
+  if (store.isFirstRun() && !store.getState().prefs.onboarded) openWelcome();
   if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !location.hostname.endsWith('claude.ai')) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }

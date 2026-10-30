@@ -4,7 +4,7 @@ export function esc(v) {
   return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-export const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+export const reducedMotion = () => document.documentElement.dataset.motion === 'reduce' || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // Opens a modal sheet. `content` is HTML for the inside of the dialog.
 // Returns the <dialog>; it removes itself once closed.

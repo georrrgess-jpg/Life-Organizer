@@ -7,7 +7,9 @@ A calm life organizer: see what's due today, what's coming up, and reach the app
 - **Calendar**: month view, agenda for the selected day, events with times or all-day, locations, notes and category colors.
 - **Tasks**: Today, Upcoming and Done views, due dates, priority, categories. On a phone, swipe right to complete or left to delete; every change can be undone.
 - **Apps**: a grid of website shortcuts with optional app links. Reorder with arrow buttons, star a shortcut to show it on Today.
-- **Settings**: light/dark/system theme, week start, export and import a backup, sample data, erase all data.
+- **Make it yours**: 9 themes (Evenday, Paper, Ocean, Forest, Lavender, Blush, Sunset, Midnight, Slate), 12 accent colors, Auto/Light/Dark plus true black, 4 text sizes, 4 fonts, 3 corner styles, comfortable or compact spacing, and reduced animations, all with a live preview. **Customize Today** adds your name to the greeting and shows or hides each section.
+- **Settings**: themes, Today layout, week start, export and import a backup, sample data, erase all data.
+- **First run**: a short welcome asks for your name and a look, and shows the two key gestures.
 
 No account, no backend, no API keys. Data is saved in the browser's `localStorage` on the device.
 
@@ -31,7 +33,7 @@ Any static server works too, for example `python3 -m http.server 5173`. Opening 
 npm test
 ```
 
-Runs 21 parser unit checks, then 26 end-to-end checks in headless Chromium: Quick add and a simulated voice session, swipe gestures, tasks, events (including a DST-change date), shortcuts, persistence, export/import, theme, keyboard, overflow at 320–1280px, and reset. It needs Playwright with Chromium (`npm i -D playwright && npx playwright install chromium` if you don't have it).
+Runs 21 parser unit checks, then 30 end-to-end checks in headless Chromium: onboarding, themes, Customize Today, Quick add and a simulated voice session, swipe gestures, tasks, events (including a DST-change date), shortcuts, persistence, export/import, theme, keyboard, overflow at 320–1280px, and reset. It needs Playwright with Chromium (`npm i -D playwright && npx playwright install chromium` if you don't have it).
 
 Keyboard: press `n` for Quick add, `Esc` to close a sheet, arrow keys to move between calendar days and task tabs.
 
@@ -51,6 +53,8 @@ js/forms.js           task, event and shortcut editors
 js/capture.js         Quick add sheet (type or speak, preview, add)
 js/parse.js           on-device natural-language parser for Quick add
 js/voice.js           speech recognition wrapper
+js/themes.js          theme presets, accents, fonts and how they're applied
+js/views/appearance.js  Themes & appearance, Customize Today, welcome
 js/components.js      shared rows, tiles and empty states
 js/views/*.js         Today, Calendar, Tasks, Apps, Settings
 sw.js, manifest       offline support and install metadata

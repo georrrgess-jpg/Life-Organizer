@@ -1,6 +1,7 @@
 import * as store from '../store.js';
 import { closeSheet, confirmDialog, copyText, esc, openSheet, sheetHeader, toast } from '../ui.js';
 import { pageHeader } from '../components.js';
+import { PRESETS } from '../themes.js';
 import { icon } from '../icons.js';
 
 const seg = (action, current, options, label) => `<div class="segmented" role="radiogroup" aria-label="${label}">
@@ -20,9 +21,11 @@ export function renderSettings(state) {
   ${pageHeader({ title: 'Settings', back: true })}
   <div class="settings">
     <section aria-labelledby="h-look">
-      <h2 class="group-label" id="h-look">Appearance</h2>
+      <h2 class="group-label" id="h-look">Make it yours</h2>
       <div class="group-list">
-        <div class="cell cell-stack"><span class="cell-label">Theme</span>
+        ${row('open-themes', 'sparkle', 'violet', 'Themes & appearance', esc(PRESETS[state.prefs.preset].label))}
+        ${row('open-today-custom', 'today', 'amber', 'Customize Today')}
+        <div class="cell cell-stack"><span class="cell-label">Mode</span>
           ${seg('set-theme', state.prefs.theme, [['system', 'Auto', 'monitor'], ['light', 'Light', 'sun'], ['dark', 'Dark', 'moon']], 'Theme')}</div>
         <div class="cell cell-stack"><span class="cell-label">Week starts on</span>
           ${seg('set-week', state.prefs.weekStart, [[0, 'Sunday'], [1, 'Monday']], 'Week starts on')}</div>

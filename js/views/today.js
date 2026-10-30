@@ -7,6 +7,7 @@ import { icon } from '../icons.js';
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 export function renderToday(state) {
+  const show = state.prefs.today;
   const today = todayKey();
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
@@ -42,8 +43,8 @@ export function renderToday(state) {
   const showSample = !hasSampleData() && !state.tasks.length && !state.events.length;
 
   return `
-  ${pageHeader({ title: greeting(now), eyebrow: formatDate(today, { weekday: 'long', month: 'long', day: 'numeric' }), summary: esc(summary) })}
-  ${captureBar()}
+  ${pageHeader({ title: greeting(now) + (state.prefs.name ? `, ${state.prefs.name}` : ''), actions: `<button type="button" class="nav-btn" data-action="open-today-custom">Edit</button>`, eyebrow: formatDate(today, { weekday: 'long', month: 'long', day: 'numeric' }), summary: esc(summary) })}
+  ${show.capture ? captureBar() : ''}
 
   ${showSample ? `<div class="callout">
     <span class="callout-icon">${icon('sparkle')}</span>
@@ -52,14 +53,14 @@ export function renderToday(state) {
     <button type="button" class="btn btn-secondary btn-sm" data-action="load-sample">Load sample data</button>
   </div>` : ''}
 
-  ${next ? `<button type="button" class="up-next" data-action="view-event" data-id="${next.id}">
+  ${show.upNext && next ? `<button type="button" class="up-next" data-action="view-event" data-id="${next.id}">
     <span class="up-next-label">${toMinutes(next.start) <= nowMin ? 'Happening now' : 'Up next'}</span>
     <span class="up-next-title">${esc(next.title)}</span>
     <span class="up-next-time">${icon('clock')}${esc(eventTime(next))}${next.location ? ` · ${esc(next.location)}` : ''}</span>
   </button>` : ''}
 
   <div class="today-grid">
-    <section class="card section" aria-labelledby="h-tasks">
+    ${show.tasks ? `<section class="card section" aria-labelledby="h-tasks">
       <div class="section-head">
         <h2 id="h-tasks">Tasks</h2>
         ${total ? `<span class="progress" aria-label="${doneToday} of ${total} done"><span class="progress-track"><span style="width:${Math.round((doneToday / total) * 100)}%"></span></span>${doneToday}/${total}</span>` : ''}
@@ -73,9 +74,9 @@ export function renderToday(state) {
         ? emptyState('tasks', doneToday ? 'All done for today' : 'Nothing due today', doneToday ? 'Nice work. Everything due today is finished.' : 'Tasks due today and anything overdue show up here.')
         : ''}
       ${doneToday ? `<p class="done-note">${icon('check')}${plural(doneToday, 'task')} completed today</p>` : ''}
-    </section>
+    </section>` : ''}
 
-    <section class="card section" aria-labelledby="h-schedule">
+    ${show.schedule ? `<section class="card section" aria-labelledby="h-schedule">
       <div class="section-head">
         <h2 id="h-schedule">Schedule</h2>
         <a class="link" href="#calendar">Calendar</a>
@@ -84,9 +85,9 @@ export function renderToday(state) {
         ? `<ul class="event-list">${schedule}</ul>`
         : emptyState('calendar', 'No events today', '', `<button type="button" class="btn btn-secondary btn-sm" data-action="new-event" data-date="${today}">${icon('plus')}Add event</button>`)}
       ${soon.length ? `<h3 class="subhead">Coming up</h3><ul class="event-list">${soon.map((e) => eventRow(e, { showDate: true })).join('')}</ul>` : ''}
-    </section>
+    </section>` : ''}
 
-    <section class="section favorites" aria-labelledby="h-fav">
+    ${show.favorites ? `<section class="section favorites" aria-labelledby="h-fav">
       <div class="section-head">
         <h2 id="h-fav">Favorites</h2>
         <a class="link" href="#apps">App wall</a>
@@ -94,7 +95,8 @@ export function renderToday(state) {
       ${favorites.length
         ? `<ul class="fav-row">${favorites.map((s) => `<li><a class="fav" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" data-action="open-shortcut" data-id="${s.id}">${tileIcon(s)}<span class="fav-name">${esc(s.name)}</span></a></li>`).join('')}</ul>`
         : `<div class="card">${emptyState('star', 'No favorites yet', 'Star shortcuts on your App wall to keep them here.', '<a class="btn btn-secondary btn-sm" href="#apps">Open App wall</a>')}</div>`}
-    </section>
+    </section>` : ''}
+    ${!Object.values(show).some(Boolean) ? emptyState('today', 'Today is hidden', 'Every section is turned off.', '<button type="button" class="btn btn-secondary btn-sm" data-action="open-today-custom">Customize Today</button>') : ''}
   </div>`;
 }
 

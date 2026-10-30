@@ -114,11 +114,28 @@ export function cleanShortcut(s) {
   };
 }
 
+const oneOf = (v, list, d) => (list.includes(v) ? v : d);
+const TODAY_SECTIONS = ['capture', 'upNext', 'tasks', 'schedule', 'favorites'];
+export const THEME_DEFAULTS = { preset: 'evenday', accent: 'teal', trueBlack: false, font: 'system', textSize: 'm', radius: 'soft', density: 'comfy', motion: 'full' };
+
 function cleanPrefs(p) {
   p = p && typeof p === 'object' ? p : {};
+  const today = p.today && typeof p.today === 'object' ? p.today : {};
   return {
-    theme: ['system', 'light', 'dark'].includes(p.theme) ? p.theme : 'system',
+    theme: oneOf(p.theme, ['system', 'light', 'dark'], 'system'),
     weekStart: p.weekStart === 1 ? 1 : 0,
+    preset: oneOf(p.preset, ['evenday', 'paper', 'ocean', 'forest', 'lavender', 'blush', 'sunset', 'midnight', 'slate'], 'evenday'),
+    accent: oneOf(p.accent, ['teal', 'mint', 'green', 'sky', 'blue', 'indigo', 'violet', 'pink', 'red', 'orange', 'amber', 'graphite'], 'teal'),
+    trueBlack: p.trueBlack === true,
+    font: oneOf(p.font, ['system', 'rounded', 'serif', 'mono'], 'system'),
+    textSize: oneOf(p.textSize, ['s', 'm', 'l', 'xl'], 'm'),
+    radius: oneOf(p.radius, ['square', 'soft', 'round'], 'soft'),
+    density: oneOf(p.density, ['comfy', 'compact'], 'comfy'),
+    motion: oneOf(p.motion, ['full', 'reduce'], 'full'),
+    name: str(p.name, 30),
+    today: Object.fromEntries(TODAY_SECTIONS.map((k) => [k, today[k] !== false])),
+    onboarded: p.onboarded === true,
+    swipeTipSeen: p.swipeTipSeen === true,
   };
 }
 
@@ -276,6 +293,7 @@ export function deleteShortcut(id) { state.shortcuts = state.shortcuts.filter((s
 
 // Preferences
 export function setPref(key, value) { state.prefs = cleanPrefs({ ...state.prefs, [key]: value }); commit(); }
+export function setPrefs(patch) { state.prefs = cleanPrefs({ ...state.prefs, ...patch }); commit(); }
 
 // Sample data
 export const hasSampleData = () => state.tasks.some((t) => t.demo) || state.events.some((e) => e.demo);

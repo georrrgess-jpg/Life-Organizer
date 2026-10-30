@@ -61,5 +61,8 @@ export function renderTasks(state, ui) {
     </form>
     <p class="hint quick-hint">Tip: “Call mom Friday !” sets the date and priority for you.</p>` : ''}
     ${body}
-  </section>`;
+  </section>
+  ${!state.prefs.swipeTipSeen && tab !== 'done' && counts[tab] && matchMedia('(pointer: coarse)').matches ? `<div class="tip">${icon('info')}
+    <span>Swipe a task <strong>right</strong> to complete it, or <strong>left</strong> to delete it.</span>
+    <button type="button" class="btn-icon btn-sm" data-action="dismiss-swipe-tip" aria-label="Dismiss tip">${icon('x')}</button></div>` : ''}`;
 }

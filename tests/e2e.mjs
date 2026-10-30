@@ -55,6 +55,22 @@ const openNewEvent = async () => { await page.click('.nav-add'); await page.clic
 
 await go('today');
 
+await step('First run shows a welcome; name and look apply, and it never returns', async () => {
+  await page.waitForSelector('dialog[open] .welcome');
+  await page.fill('#welcome-name', 'Sam');
+  await page.click('dialog [data-pref="preset"][data-value="ocean"]');
+  await page.click('dialog .welcome button[type="submit"]');
+  await page.waitForSelector('dialog', { state: 'detached' });
+  assert.match(await page.textContent('.page-head h1'), /, Sam$/);
+  const p = (await state()).prefs;
+  assert.equal(p.preset, 'ocean');
+  assert.equal(p.accent, 'blue');
+  await page.reload();
+  await page.waitForSelector('.page');
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator('dialog[open]').count(), 0);
+});
+
 await step('First run shows example shortcuts and empty states', async () => {
   assert.equal((await page.locator('.fav').count()), 3);
   await page.getByText('Nothing due today').first().waitFor();
@@ -304,6 +320,45 @@ await step('Dark theme applies and persists', async () => {
   await page.waitForSelector('.page');
   assert.equal(await page.getAttribute('html', 'data-theme'), 'dark');
   await page.click('[data-action="set-theme"][data-value="system"]');
+});
+
+await step('Themes: preset, accent, true black, font, size, corners, density apply live and persist', async () => {
+  await go('preferences');
+  await page.click('[data-action="open-themes"]');
+  await page.waitForSelector('dialog[open] .theme-preview');
+  for (const [pref, value] of [['preset', 'forest'], ['accent', 'pink'], ['theme', 'dark'], ['font', 'serif'], ['textSize', 'l'], ['radius', 'round'], ['density', 'compact'], ['motion', 'reduce']]) {
+    await page.click(`dialog [data-pref="${pref}"][data-value="${value}"]`);
+    assert.equal(await page.getAttribute(`dialog [data-pref="${pref}"][data-value="${value}"]`, 'aria-pressed'), 'true', pref);
+  }
+  await page.click('dialog label[for="pref-black"]');
+  const css = await page.evaluate(() => { const s = document.documentElement.style; return { bg: s.getPropertyValue('--bg'), accent: s.getPropertyValue('--accent'), font: s.getPropertyValue('--font'), zoom: s.getPropertyValue('--zoom'), radius: document.documentElement.dataset.radius, density: document.documentElement.dataset.density }; });
+  assert.deepEqual(css, { bg: '#000000', accent: '#e889a8', font: css.font, zoom: '1.1', radius: 'round', density: 'compact' });
+  assert.match(css.font, /serif/);
+  await page.keyboard.press('Escape');
+  await page.reload();
+  await page.waitForSelector('.page');
+  assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue('--accent')), '#e889a8');
+  await page.click('[data-action="open-themes"]');
+  await page.click('dialog [data-reset-look]');
+  assert.equal((await state()).prefs.preset, 'evenday');
+  await page.keyboard.press('Escape');
+  await page.click('[data-action="set-theme"][data-value="system"]');
+});
+
+await step('Customize Today hides sections and sets the greeting name', async () => {
+  await go('today');
+  await page.click('[data-action="open-today-custom"]');
+  await page.fill('#pref-name', 'Alex');
+  await page.click('label[for="sec-favorites"]');
+  await page.click('dialog .nav-primary');
+  await page.waitForSelector('dialog', { state: 'detached' });
+  assert.match(await page.textContent('.page-head h1'), /, Alex$/);
+  assert.equal(await page.locator('#h-fav').count(), 0);
+  await page.click('[data-action="open-today-custom"]');
+  await page.click('label[for="sec-favorites"]');
+  await page.click('dialog .nav-primary');
+  await page.waitForSelector('dialog', { state: 'detached' });
+  await page.locator('#h-fav').waitFor();
 });
 
 await step('Keyboard: "n" opens quick add, Escape closes it', async () => {
