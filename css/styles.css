@@ -60,7 +60,9 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+/* App shell: the page never scrolls (so iOS can't rubber-band the tab bar); only <main> does. */
+html { -webkit-text-size-adjust: 100%; height: 100%; overscroll-behavior: none; }
+#app { height: 100%; display: flex; flex-direction: column; }
 body {
   margin: 0;
   background: var(--bg);
@@ -68,7 +70,9 @@ body {
   font: 16px/1.5 var(--font);
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
-  overflow-x: hidden;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 h1, h2, h3, p { margin: 0; }
 h1, h2, h3 { text-wrap: balance; }
@@ -89,7 +93,7 @@ code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: va
 
 /* ---------- Shell: iOS tab bar with a raised Quick add button ---------- */
 .nav {
-  position: fixed; inset: auto 0 0 0; z-index: 20;
+  position: relative; order: 2; flex: none; z-index: 20;
   display: grid; grid-template-columns: repeat(5, 1fr); align-items: center;
   padding: 4px max(6px, env(safe-area-inset-right, 0px)) calc(4px + env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px));
   background: color-mix(in srgb, var(--surface) 82%, transparent);
@@ -118,7 +122,7 @@ code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: va
 .nav-add:active { transform: scale(.92); }
 .nav-add:hover { background: var(--accent-hover); }
 
-main { outline: none; padding: 0 max(16px, env(safe-area-inset-right, 0px)) calc(var(--nav-h) + 40px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+main { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; outline: none; padding: 0 max(16px, env(safe-area-inset-right, 0px)) 40px max(16px, env(safe-area-inset-left, 0px)); }
 .page { max-width: 680px; margin: 0 auto; display: grid; gap: 16px; animation: page-in .22s var(--ease); }
 @keyframes page-in { from { opacity: 0; transform: translateY(4px); } }
 
@@ -604,7 +608,7 @@ a.tile-body:hover, button.tile-body:hover { border-color: var(--border-strong); 
   .today-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; }
   .cal-layout { grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr) !important; }
   .nav {
-    inset: 0 auto 0 0; width: 232px; display: flex; flex-direction: column; align-items: stretch; gap: 2px;
+    order: 0; height: 100%; overflow-y: auto; display: flex; flex-direction: column; align-items: stretch; gap: 2px;
     padding: calc(22px + env(safe-area-inset-top, 0px)) 14px 20px max(14px, env(safe-area-inset-left, 0px));
     border-top: 0; border-right: 1px solid var(--border); background: var(--surface);
     backdrop-filter: none; -webkit-backdrop-filter: none;
@@ -624,7 +628,8 @@ a.tile-body:hover, button.tile-body:hover { border-color: var(--border-strong); 
   .nav-item:hover { background: var(--surface-2); }
   .nav-item[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
   .mobile-only { display: none !important; }
-  main { padding: 0 32px 120px 264px; }
+  #app { display: grid; grid-template-columns: 232px minmax(0, 1fr); }
+  main { padding: 0 32px 64px; }
   .page { max-width: 1040px; gap: 20px; }
   .page-calendar, .page-today { max-width: 1120px; }
   .page-tasks, .page-preferences { max-width: 720px; }

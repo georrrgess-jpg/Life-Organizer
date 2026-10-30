@@ -323,7 +323,7 @@ await step('No horizontal overflow at phone and desktop widths', async () => {
     await page.setViewportSize({ width, height: 900 });
     for (const r of ['today', 'calendar', 'tasks', 'apps', 'preferences']) {
       await go(r);
-      const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      const over = await page.evaluate(() => Math.max(document.documentElement.scrollWidth - window.innerWidth, document.querySelector('main').scrollWidth - document.querySelector('main').clientWidth));
       assert.ok(over <= 0, `${r} at ${width}px overflows by ${over}px`);
     }
   }
@@ -356,6 +356,21 @@ await step('Reset requires confirmation and erases data', async () => {
   await page.waitForSelector('dialog', { state: 'detached' });
   const s = await state();
   assert.equal(s.tasks.length + s.events.length, 0);
+});
+
+await step('Page itself never scrolls; only the content area does', async () => {
+  await page.setViewportSize({ width: 390, height: 600 });
+  await go('preferences');
+  const r = await page.evaluate(() => {
+    const m = document.querySelector('main');
+    m.scrollTop = 400;
+    const nav = document.querySelector('.nav').getBoundingClientRect();
+    return { docScroll: document.scrollingElement.scrollHeight - innerHeight, mainScrolled: m.scrollTop > 0, navBottom: Math.round(nav.bottom) };
+  });
+  assert.ok(r.docScroll <= 0, `document scrolls by ${r.docScroll}px`);
+  assert.ok(r.mainScrolled, 'content area scrolls');
+  assert.equal(r.navBottom, 600);
+  await page.setViewportSize({ width: 390, height: 844 });
 });
 
 await step('No runtime errors were logged', async () => {

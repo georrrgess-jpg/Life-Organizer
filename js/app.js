@@ -79,7 +79,8 @@ function route() {
   if (changed) ui.appsEdit = false;
   render();
   if (changed) {
-    window.scrollTo({ top: 0 });
+    main.scrollTo({ top: 0 });
+    document.body.classList.remove('scrolled');
     main.focus({ preventScroll: true });
     document.title = next === 'today' ? 'Evenday' : `${ROUTES[next].label} · Evenday`;
   }
@@ -241,8 +242,8 @@ function bindEvents() {
   });
 
   window.addEventListener('hashchange', route);
-  const onScroll = () => document.body.classList.toggle('scrolled', window.scrollY > 28);
-  window.addEventListener('scroll', onScroll, { passive: true });
+  const onScroll = () => document.body.classList.toggle('scrolled', main.scrollTop > 28);
+  main.addEventListener('scroll', onScroll, { passive: true });
   bindSwipes();
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
 
