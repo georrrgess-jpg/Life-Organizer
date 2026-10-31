@@ -2,7 +2,7 @@
 import * as store from './store.js';
 import { todayKey, parseKey } from './dates.js';
 import { icon } from './icons.js';
-import { confirmDialog, onDataChange, reducedMotion, toast } from './ui.js';
+import { closeSheet, confirmDialog, onDataChange, openSheet, reducedMotion, sheetHeader, toast } from './ui.js';
 import { openEventDetail, openEventForm, openShortcutForm, openTaskForm } from './forms.js';
 import { openCapture, openCaptureHelp } from './capture.js';
 import { parseItem } from './parse.js';
@@ -18,12 +18,12 @@ import { celebrate, openGoalForm, openHabitForm, renderLife } from './views/life
 
 const ROUTES = {
   today: { label: 'Today', icon: 'today', render: renderToday },
-  calendar: { label: 'Calendar', icon: 'calendar', render: renderCalendar },
-  plan: { label: 'Plan', icon: 'wand', render: renderPlan, desktopOnly: true },
+  plan: { label: 'Plan', icon: 'wand', render: renderPlan },
+  calendar: { label: 'Calendar', icon: 'calendar', render: renderCalendar, inMore: true, hint: 'Month, agenda and planned focus' },
   tasks: { label: 'Tasks', icon: 'tasks', render: renderTasks },
-  life: { label: 'Life', icon: 'life', render: renderLife },
-  apps: { label: 'Apps', icon: 'grid', render: renderApps, desktopOnly: true },
-  preferences: { label: 'Settings', icon: 'settings', render: renderSettings, hidden: true },
+  life: { label: 'Life', icon: 'life', render: renderLife, inMore: true, hint: 'Habits, goals and your week' },
+  apps: { label: 'Apps', icon: 'grid', render: renderApps, inMore: true, hint: 'Your app wall and favorites' },
+  preferences: { label: 'Settings', icon: 'settings', render: renderSettings, hidden: true, inMore: true, hint: 'Themes, Today, backups' },
 };
 
 const now = new Date();
@@ -42,14 +42,16 @@ const ui = {
 let main;
 
 function shell() {
-  const item = (key) => `<a href="#${key}" class="nav-item${ROUTES[key].hidden ? ' nav-secondary' : ''}${ROUTES[key].desktopOnly ? ' nav-desktop' : ''}" data-nav="${key}">${icon(ROUTES[key].icon)}<span>${ROUTES[key].label}</span></a>`;
+  const item = (key) => `<a href="#${key}" class="nav-item${ROUTES[key].hidden ? ' nav-secondary' : ''}${ROUTES[key].inMore && !ROUTES[key].hidden ? ' nav-desktop' : ''}" data-nav="${key}">${icon(ROUTES[key].icon)}<span>${ROUTES[key].label}</span></a>`;
   document.getElementById('app').innerHTML = `
     <a class="skip-link" href="#main">Skip to content</a>
     <nav class="nav" aria-label="Main">
       <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Evenday</div>
-      ${item('today')}${item('plan')}${item('calendar')}
+      ${item('today')}${item('plan')}
       <button type="button" class="nav-add" data-action="quick-add" aria-label="Quick add a task or event" title="Quick add (N)">${icon('plus')}<span>Quick add</span></button>
-      ${item('tasks')}${item('life')}${item('apps')}${item('preferences')}
+      ${item('calendar')}${item('tasks')}
+      <button type="button" class="nav-item nav-more" data-action="open-more" aria-haspopup="dialog">${icon('more')}<span>More</span></button>
+      ${item('life')}${item('apps')}${item('preferences')}
     </nav>
     <main id="main" tabindex="-1"></main>
     <div id="load-warning" class="banner" role="alert" hidden>${icon('alert')}<span>Your saved data couldn’t be read, so Evenday started fresh. A copy was kept safely.</span><button type="button" class="btn btn-secondary btn-sm" data-action="recover-data">Recover</button></div>
@@ -73,6 +75,9 @@ function render() {
     if (a.dataset.nav === ui.route) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
+  // On phones, sections reached through More light up the More tab.
+  const more = document.querySelector('.nav-more');
+  if (ROUTES[ui.route].inMore) more.setAttribute('aria-current', 'page'); else more.removeAttribute('aria-current');
   document.getElementById('storage-warning').hidden = store.isStorageOk();
   document.getElementById('load-warning').hidden = !store.hadLoadError() || ui.loadWarningDismissed;
   applyTheme();
@@ -94,6 +99,17 @@ function route() {
     main.focus({ preventScroll: true });
     document.title = next === 'today' ? 'Evenday' : `${ROUTES[next].label} · Evenday`;
   }
+}
+
+// ---------- More menu (phones) ----------
+function openMore() {
+  const keys = ['calendar', 'life', 'apps', 'preferences'];
+  const dlg = openSheet(`${sheetHeader('More')}
+    <div class="sheet-body"><nav class="more-grid" aria-label="More sections">
+      ${keys.map((k) => `<a class="more-item" href="#${k}" ${ui.route === k ? 'aria-current="page"' : ''}>
+        <span class="more-icon">${icon(ROUTES[k].icon)}</span><span class="more-label">${ROUTES[k].label}</span><span class="more-hint">${ROUTES[k].hint}</span></a>`).join('')}
+    </nav></div>`, { label: 'More', className: 'sheet-more' });
+  dlg.querySelectorAll('a').forEach((a) => a.addEventListener('click', () => closeSheet(dlg)));
 }
 
 // ---------- Actions ----------
@@ -181,6 +197,7 @@ const actions = {
   'plan-toggle': toggleTask,
   'plan-block': (el) => openBlockSheet(el.dataset.id, planDate(ui)),
   'plan-carry': (el) => carryOver(el.dataset.ids.split(',').filter(Boolean), planDate(ui)),
+  'open-more': openMore,
   'open-plan': () => { ui.planDay = 'today'; location.hash = 'plan'; },
   'open-plan-day': (el) => { ui.planDay = el.dataset.date === todayKey() ? 'today' : 'tomorrow'; location.hash = 'plan'; },
   // Life

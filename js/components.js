@@ -73,7 +73,7 @@ export function pageHeader({ title, eyebrow = '', summary = '', actions = '', ba
   return `<div class="topbar">
     <div class="topbar-side">${back ? `<button type="button" class="nav-btn back-btn" data-action="go-back">${icon('back')}Back</button>` : ''}</div>
     <span class="topbar-title" aria-hidden="true">${esc(title)}</span>
-    <div class="topbar-side topbar-actions">${actions}${back ? '' : `<a class="btn-icon mobile-only" href="#preferences" aria-label="Settings">${icon('settings')}</a>`}</div>
+    <div class="topbar-side topbar-actions">${actions}</div>
   </div>
   <header class="page-head">
     ${eyebrow ? `<p class="eyebrow">${esc(eyebrow)}</p>` : ''}

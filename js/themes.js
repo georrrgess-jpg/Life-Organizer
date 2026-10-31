@@ -18,7 +18,7 @@ export const PRESETS = {
 export const ACCENTS = {
   teal: ['#0f7a70', '#4bb8aa'], mint: ['#13806a', '#3fc8a4'], green: ['#2f7d3a', '#62b56e'], sky: ['#0a73a8', '#4fb3e6'],
   blue: ['#2563a8', '#5aa2e6'], indigo: ['#4650c8', '#8c95f5'], violet: ['#6a4fc8', '#a08ff0'], pink: ['#b8436a', '#e889a8'],
-  red: ['#c23a32', '#f07a6e'], orange: ['#b4541a', '#ec9152'], amber: ['#94650a', '#e0b048'], graphite: ['#3f4650', '#c3c9d1'],
+  red: ['#c23a32', '#f07a6e'], orange: ['#a44a15', '#ec9152'], amber: ['#94650a', '#e0b048'], graphite: ['#3f4650', '#c3c9d1'],
 };
 
 export const FONTS = {

@@ -35,7 +35,7 @@ Any static server works too, for example `python3 -m http.server 5173`. Opening 
 npm test
 ```
 
-Runs 21 parser and 16 planner/dashboard unit checks, then 41 end-to-end checks in headless Chromium: onboarding, themes, Customize Today, Quick add and a simulated voice session, swipe gestures, tasks, events (including a DST-change date), shortcuts, persistence, export/import, theme, keyboard, overflow at 320–1280px, and reset. It needs Playwright with Chromium (`npm i -D playwright && npx playwright install chromium` if you don't have it).
+Runs 21 parser and 16 planner/dashboard unit checks, then 43 end-to-end checks in headless Chromium: onboarding, themes, Customize Today, Quick add and a simulated voice session, swipe gestures, tasks, events (including a DST-change date), shortcuts, persistence, export/import, theme, keyboard, overflow at 320–1280px, and reset. It needs Playwright with Chromium (`npm i -D playwright && npx playwright install chromium` if you don't have it).
 
 Keyboard: press `n` for Quick add, `Esc` to close a sheet, arrow keys to move between calendar days and task tabs.
 

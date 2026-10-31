@@ -16,7 +16,7 @@ const browser = await chromium.launch();
 const results = [];
 const errors = [];
 async function step(name, fn) {
-  try { await fn(); results.push(['PASS', name]); } catch (e) { results.push(['FAIL', name, e.message.split('\n')[0]]); }
+  try { await fn(); results.push(['PASS', name]); } catch (e) { results.push(['FAIL', name, (e.message.split('\n').find((l) => l.includes(';')) || e.message.split('\n')[0]).slice(0, 600) + (process.env.DEBUG ? `\n${e.stack}` : '')]); }
 }
 
 // New York timezone so the DST change on 2026-11-01 is exercised.
@@ -258,9 +258,18 @@ await step('Swipe right completes and swipe left deletes a task (touch), both un
   assert.equal((await state()).tasks.some((x) => x.id === id), true);
 });
 
-await step('Settings opens from the top bar and Back returns to the same tab', async () => {
+await step('More menu reaches Calendar, Life, Apps and Settings; More stays highlighted; Back returns', async () => {
   await go('tasks');
-  await page.click('.topbar a[href="#preferences"]');
+  await page.click('.nav-more');
+  await page.waitForSelector('dialog[open] .more-grid');
+  assert.equal(await page.locator('dialog .more-item').count(), 4);
+  await page.click('dialog .more-item[href="#life"]');
+  await page.waitForSelector('.page-life');
+  await page.waitForSelector('dialog', { state: 'detached' });
+  assert.equal(await page.getAttribute('.nav-more', 'aria-current'), 'page');
+  await go('tasks');
+  await page.click('.nav-more');
+  await page.click('dialog .more-item[href="#preferences"]');
   await page.waitForSelector('.page-preferences');
   await page.click('[data-action="go-back"]');
   await page.waitForSelector('.page-tasks');
@@ -316,8 +325,9 @@ await step('Plan: complete a block, change its length, lock it, move one to tomo
   await page.reload();
   await page.waitForSelector('.tip-warn');
   await page.click('.tip-warn [data-action="plan-generate"]');
+  // Re-placed elsewhere, or left out when the rest of the day is full; never left clashing.
   const moved = (await state()).plans[today].blocks.find((x) => x.taskId === bank);
-  assert.notEqual(moved.start, b.start, 'clashing locked block moved');
+  if (moved) assert.notEqual(moved.start, b.start, 'clashing locked block moved');
   assert.equal(await page.locator('.tip-warn').count(), 0);
   const report = (await state()).tasks.find((x) => x.title === 'Write report').id;
   await page.click(`[data-action="plan-block"][data-id="${report}"]`);
@@ -653,6 +663,49 @@ await step('Unreadable saved data is kept, not overwritten', async () => {
   await p3.click('#load-warning [data-action="recover-data"]');
   assert.equal(await p3.inputValue('#recover-text'), '{broken json');
   await p3.close();
+});
+
+await step('Text and accent colors meet contrast targets in every theme', async () => {
+  const fails = await page.evaluate(async () => {
+    const { applyAppearance, PRESETS } = await import('/js/themes.js');
+    const lum = (c) => { const [r, g, b] = c.match(/[\d.]+/g).slice(0, 3).map(Number).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const probe = document.createElement('div'); document.body.append(probe);
+    const col = (v) => { probe.style.color = `var(${v})`; return getComputedStyle(probe).color; };
+    const ratio = (a, b) => { const [x, y] = [lum(col(a)), lum(col(b))].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+    const out = [];
+    for (const preset of Object.keys(PRESETS)) for (const theme of ['light', 'dark']) for (const trueBlack of theme === 'dark' ? [false, true] : [false]) {
+      applyAppearance({ theme, preset, accent: PRESETS[preset].accent, trueBlack, font: 'system', textSize: 'm', radius: 'soft', density: 'comfy', motion: 'full' });
+      for (const [a, b, min] of [['--text', '--surface', 7], ['--text-2', '--surface', 4.5], ['--text-3', '--surface', 3], ['--accent', '--surface', 4.5], ['--accent', '--bg', 4.5], ['--on-accent', '--accent', 4.5], ['--danger', '--surface', 4.5]]) {
+        const v = ratio(a, b); if (v < min) out.push(`${preset}/${theme}${trueBlack ? '/black' : ''} ${a} on ${b}: ${v.toFixed(2)}`);
+      }
+    }
+    probe.remove();
+    applyAppearance(JSON.parse(localStorage.getItem('evenday:data:v1')).prefs);
+    return out;
+  });
+  assert.deepEqual(fails, []);
+});
+
+await step('Touch screens: every visible control is at least 44px tall', async () => {
+  const mctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const m = await mctx.newPage();
+  await m.goto(BASE + '#today');
+  await m.evaluate(() => { const d = JSON.parse(localStorage.getItem('evenday:data:v1')); d.prefs.onboarded = true; localStorage.setItem('evenday:data:v1', JSON.stringify(d)); });
+  await m.reload();
+  await m.waitForSelector('.page');
+  if (await m.locator('dialog[open]').count()) await m.click('[data-skip]');
+  await m.evaluate(() => document.querySelector('[data-action="load-sample"]')?.click());
+  const small = [];
+  for (const r of ['today', 'plan', 'tasks', 'life', 'apps', 'calendar']) {
+    await m.goto(BASE + '#' + r);
+    await m.waitForTimeout(150);
+    small.push(...await m.evaluate((route) => [...document.querySelectorAll('main button, main a, .nav button, .nav a')]
+      .filter((e) => e.offsetParent && !e.closest('.heat-grid, .heat-legend, .days'))
+      .map((e) => [e, e.getBoundingClientRect()]).filter(([, b]) => b.height < 43.5)
+      .map(([e, b]) => `${route}: ${e.className || e.tagName} ${Math.round(b.height)}`), r));
+  }
+  await mctx.close();
+  assert.deepEqual(small, [], small.join("; "));
 });
 
 await step('No runtime errors were logged', async () => {

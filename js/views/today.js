@@ -74,10 +74,10 @@ export function renderToday(state) {
       </div>
       ${overdue.length ? `<div class="subhead-row"><h3 class="subhead subhead-warn">Overdue</h3>
         <button type="button" class="link-btn small" data-action="move-overdue">Move to today</button></div>
-        <ul class="task-list">${overdue.map((t) => taskRow(t, { today })).join('')}</ul>` : ''}
-      ${dueToday.length ? `${overdue.length ? '<h3 class="subhead">Today</h3>' : ''}<ul class="task-list">${dueToday.map((t) => taskRow(t, { showDue: false, today })).join('')}</ul>` : ''}
+        <ul class="task-list">${overdue.slice(0, 3).map((t) => taskRow(t, { today })).join('')}</ul>${more(overdue.length - 3, 'overdue')}` : ''}
+      ${dueToday.length ? `${overdue.length ? '<h3 class="subhead">Today</h3>' : ''}<ul class="task-list">${dueToday.slice(0, 6).map((t) => taskRow(t, { showDue: false, today })).join('')}</ul>${more(dueToday.length - 6, 'due today')}` : ''}
       ${!overdue.length && !dueToday.length
-        ? emptyState('tasks', doneToday ? 'All done for today' : 'Nothing due today', doneToday ? 'Nice work. Everything due today is finished.' : 'Tasks due today and anything overdue show up here.')
+        ? quiet('tasks', doneToday ? 'All done for today. Nice work.' : 'Nothing due today.', '<a class="link" href="#tasks">See upcoming</a>')
         : ''}
       ${doneToday ? `<p class="done-note">${icon('check')}${plural(doneToday, 'task')} completed today</p>` : ''}
     </section>` : ''}
@@ -96,7 +96,7 @@ export function renderToday(state) {
       </div>
       ${todaysEvents.length
         ? `<ul class="event-list">${schedule}</ul>`
-        : emptyState('calendar', 'No events today', '', `<button type="button" class="btn btn-secondary btn-sm" data-action="new-event" data-date="${today}">${icon('plus')}Add event</button>`)}
+        : quiet('calendar', 'No events today.', `<button type="button" class="link-btn small" data-action="new-event" data-date="${today}">Add event</button>`)}
       ${soon.length ? `<h3 class="subhead">Coming up</h3><ul class="event-list">${soon.map((e) => eventRow(e, { showDate: true })).join('')}</ul>` : ''}
     </section>` : ''}
 
@@ -112,6 +112,10 @@ export function renderToday(state) {
     ${!Object.values(show).some(Boolean) ? emptyState('today', 'Today is hidden', 'Every section is turned off.', '<button type="button" class="btn btn-secondary btn-sm" data-action="open-today-custom">Customize Today</button>') : ''}
   </div>`;
 }
+
+// One calm line instead of a big empty card.
+const quiet = (ic, text, action = '') => `<p class="quiet">${icon(ic)}<span>${text}</span>${action}</p>`;
+const more = (n, what) => (n > 0 ? `<a class="more-link" href="#tasks">+${n} more ${what}</a>` : '');
 
 const eventTime = (e) => `${formatTime(e.start)} – ${formatTime(e.end)}`;
 
