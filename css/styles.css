@@ -894,3 +894,16 @@ button.heat:not(:disabled):hover { outline: 2px solid var(--text-3); outline-off
 .planned-list li + li { border-top: 1px solid var(--border); }
 .planned-time { width: 66px; flex: none; color: var(--accent); font-weight: 650; font-size: 13px; font-variant-numeric: tabular-nums; }
 .planned-list .is-done .planned-title { text-decoration: line-through; color: var(--text-3); }
+
+/* ---------- Phase A fixes ---------- */
+/* Tall sheets: rows keep their natural height and the body scrolls (rows were being squashed). */
+.sheet-body { grid-auto-rows: max-content; }
+/* Focus rings inside clipped containers are drawn inset so they're never cut off. */
+.task-row :focus-visible, .group-list :focus-visible, .tl-card :focus-visible { outline-offset: -3px; }
+/* Task tabs stick below the top bar instead of sliding under it. */
+.tabs { top: calc(52px + env(safe-area-inset-top, 0px)); }
+/* Toasts as a top-layer popover: reset UA popover styles, keep the old placement. */
+.toasts[popover] { inset: auto 0 calc(var(--nav-h) + 20px + env(safe-area-inset-bottom, 0px)) 0; margin: 0; border: 0; padding: 0 16px; background: transparent; width: auto; height: auto; overflow: visible; color: inherit; }
+.toasts[popover]:not(:popover-open) { display: none; }
+@media (min-width: 900px) { .toasts[popover] { bottom: 28px; padding-left: 232px; } }
+.banner .btn { margin-left: auto; flex: none; }

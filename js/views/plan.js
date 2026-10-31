@@ -17,12 +17,15 @@ export function generatePlan(date, { extraLocked = [] } = {}) {
   const old = plans[date];
   const isToday = date === todayKey();
   const nowMin = isToday ? nowMinutes() : null;
-  const locked = [...(old?.blocks.filter((b) => b.locked && !extraLocked.some((x) => x.taskId === b.taskId)) || []), ...extraLocked];
+  // Locked blocks stay put unless the calendar now clashes with them; those get re-placed.
+  const clashing = new Set(old ? conflicts(old, events).map((b) => b.taskId) : []);
+  const locked = [...(old?.blocks.filter((b) => b.locked && !clashing.has(b.taskId) && !extraLocked.some((x) => x.taskId === b.taskId)) || []), ...extraLocked];
   const result = buildPlan({ date, tasks, events, prefs, nowMin, locked, skipped: old?.skipped || [] });
   // Keep blocks already finished earlier today so the timeline tells the whole story.
   const doneIds = new Set(tasks.filter((t) => t.done).map((t) => t.id));
   const kept = (old?.blocks || []).filter((b) => doneIds.has(b.taskId) && nowMin != null && toMinutes(b.end) <= nowMin);
   const blocks = [...kept, ...result.blocks].sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
+  if (!blocks.length && !old) return { ...result, blocks };
   store.savePlan({ date, blocks, skipped: old?.skipped || [] });
   return { ...result, blocks };
 }
@@ -126,7 +129,7 @@ export function renderPlan(state, ui) {
       ${ring(blocks.length ? done / blocks.length : 0, `${done} of ${blocks.length} planned tasks done`)}
       <div class="plan-summary-text">
         <p class="plan-summary-title">${done === blocks.length && blocks.length ? 'Plan complete. Well done.' : `${done} of ${blocks.length} done`}</p>
-        <p class="muted small">${formatDuration(planned)} of focused work${unplaced.length ? ` · ${unplaced.length} didn’t fit` : ''}</p>
+        <p class="muted small">${formatDuration(planned)} of focused work${unplaced.length ? ` · ${unplaced.length} not planned yet` : ''}</p>
       </div>
       <button type="button" class="btn btn-secondary btn-sm" data-action="plan-generate">${icon('refresh')}Re-plan</button>
     </section>
@@ -139,8 +142,11 @@ export function renderPlan(state, ui) {
       <button type="button" class="btn btn-primary btn-sm" data-action="plan-carry" data-ids="${unfinishedPast.map((b) => b.taskId).join(',')}">Move to tomorrow</button>
     </section>` : ''}
     ${unplaced.length ? `<section class="card section">
-      <div class="section-head"><h2>Didn’t fit</h2><button type="button" class="link-btn small" data-action="plan-carry" data-ids="${unplaced.map((t) => t.id).join(',')}">Move all to tomorrow</button></div>
+      <div class="section-head"><h2>Not in the plan yet</h2></div>
+      <p class="muted small">Added after planning, or there wasn’t room.</p>
       <ul class="unplaced">${unplaced.map((t) => `<li><span>${esc(t.title)}</span><span class="muted small">${formatDuration(t.estimate)}</span></li>`).join('')}</ul>
+      <div class="setting-actions"><button type="button" class="btn btn-secondary btn-sm" data-action="plan-generate">${icon('wand')}Fit into plan</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-action="plan-carry" data-ids="${unplaced.map((t) => t.id).join(',')}">Move to tomorrow</button></div>
     </section>` : ''}
     ${prefsRow}`;
 }

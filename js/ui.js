@@ -25,6 +25,12 @@ export function openSheet(content, { label, onClose, className = '' } = {}) {
   });
   dlg.addEventListener('cancel', (e) => { e.preventDefault(); closeSheet(dlg); });
   dlg.addEventListener('close', () => {
+    // Hand any visible toast back to the page (or the sheet underneath) before this one goes.
+    const region = dlg.querySelector('#toasts');
+    if (region) {
+      ([...document.querySelectorAll('dialog[open]')].filter((d) => d !== dlg).pop() || document.body).append(region);
+      if (region.children.length) showRegion(region);
+    }
     dlg.remove();
     onClose?.();
     if (!dlg._handedOff && opener && document.contains(opener)) opener.focus();
@@ -41,6 +47,11 @@ export function handoffSheet(dlg) {
   handoffOpener = dlg._opener;
   dlg._handedOff = true;
   dlg.close();
+}
+
+function showRegion(region) {
+  if (!region.showPopover) return;
+  try { if (region.matches(':popover-open')) region.hidePopover(); region.showPopover(); } catch { /* fixed positioning still works */ }
 }
 
 export function closeSheet(dlg) {
@@ -120,6 +131,11 @@ export function onDataChange() {
 export function toast(message, { actionLabel, onAction, actionHref, duration = 4500 } = {}) {
   const region = document.getElementById('toasts');
   clearTimeout(toastTimer);
+  // Everything outside an open modal sheet is inert, so the toast lives inside the top sheet
+  // while one is open, and joins the top layer as a popover so it draws above everything.
+  const host = [...document.querySelectorAll('dialog[open]')].pop() || document.body;
+  if (region.parentElement !== host) host.append(region);
+  showRegion(region);
   region.innerHTML = `<div class="toast" role="status">
     <span>${esc(message)}</span>
     ${actionHref ? `<a class="toast-action" href="${esc(actionHref)}" target="_blank" rel="noopener noreferrer">${esc(actionLabel)}</a>`
@@ -130,7 +146,10 @@ export function toast(message, { actionLabel, onAction, actionHref, duration = 4
   function hide() {
     if (hideCurrentToast === hide) hideCurrentToast = null;
     el.classList.add('leaving');
-    setTimeout(() => el.remove(), reducedMotion() ? 0 : 200);
+    setTimeout(() => {
+      el.remove();
+      if (!region.children.length && region.hidePopover) { try { region.hidePopover(); } catch { /* not open */ } }
+    }, reducedMotion() ? 0 : 200);
   }
   hideCurrentToast = hide;
   toastIsFresh = true;

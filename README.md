@@ -35,7 +35,7 @@ Any static server works too, for example `python3 -m http.server 5173`. Opening 
 npm test
 ```
 
-Runs 21 parser and 16 planner/dashboard unit checks, then 38 end-to-end checks in headless Chromium: onboarding, themes, Customize Today, Quick add and a simulated voice session, swipe gestures, tasks, events (including a DST-change date), shortcuts, persistence, export/import, theme, keyboard, overflow at 320–1280px, and reset. It needs Playwright with Chromium (`npm i -D playwright && npx playwright install chromium` if you don't have it).
+Runs 21 parser and 16 planner/dashboard unit checks, then 41 end-to-end checks in headless Chromium: onboarding, themes, Customize Today, Quick add and a simulated voice session, swipe gestures, tasks, events (including a DST-change date), shortcuts, persistence, export/import, theme, keyboard, overflow at 320–1280px, and reset. It needs Playwright with Chromium (`npm i -D playwright && npx playwright install chromium` if you don't have it).
 
 Keyboard: press `n` for Quick add, `Esc` to close a sheet, arrow keys to move between calendar days and task tabs.
 
@@ -73,7 +73,9 @@ tests/e2e.mjs         end-to-end checks
 
 ## Saved data
 
-Data is stored as JSON in `localStorage` with a format version. When the format changes (version 2 added estimates, goals, habits and plans), older data is upgraded automatically on load and an untouched copy is kept under `evenday:backup:pre-v2`. Unreadable data is never overwritten; it's kept under an `evenday:unreadable:*` key.
+Data is stored as JSON in `localStorage` with a format version. When the format changes (version 2 added estimates, goals, habits and plans), older data is upgraded automatically on load and an untouched copy is kept under `evenday:backup:pre-v2`. Unreadable data is never overwritten; it's kept under an `evenday:unreadable:*` key, and a banner offers to copy or download it.
+
+Before **Erase all data** or **Import**, the current data is saved as a backup (`evenday:backup:v1`). Erase can be undone right away, and **Settings → Restore previous data** swaps the backup back in (keeping the current data as the new backup). **Clear completed** hides finished tasks instead of deleting them, so goal progress and activity history stay intact. Evenday asks the browser for persistent storage and reminds you to export a backup if you haven't in 14 days.
 
 ## Known limitations
 

@@ -10,7 +10,7 @@ const html = `<title>Evenday</title>
 <meta name="theme-color" content="#f6f6f3">
 <style>${css}</style>
 <div id="app"></div>
-<div id="toasts" class="toasts" aria-live="polite"></div>
+<div id="toasts" class="toasts" aria-live="polite" popover="manual"></div>
 <script>${js.replace(/<\/script/gi, '<\\/script')}</script>
 `;
 mkdirSync('dist', { recursive: true });

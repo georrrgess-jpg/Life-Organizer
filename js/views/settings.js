@@ -14,8 +14,15 @@ const row = (action, ic, tone, label, detail = '', danger = false) => `<button t
   ${detail ? `<span class="cell-detail">${detail}</span>` : ''}${danger ? '' : icon('chevronRight', 'chev')}
 </button>`;
 
+const sinceText = (iso) => {
+  const days = Math.floor((Date.now() - new Date(iso)) / 864e5);
+  return days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
+};
+const backupLabel = (b) => `${{ erase: 'Before erase', import: 'Before import', restore: 'Before restore' }[b.reason] || 'Saved'}${b.savedAt ? `, ${sinceText(b.savedAt)}` : ''}`;
+
 export function renderSettings(state) {
   const sample = store.hasSampleData();
+  const backup = store.readBackup();
   return `
   ${pageHeader({ title: 'Settings', back: true })}
   <div class="settings">
@@ -41,8 +48,9 @@ export function renderSettings(state) {
     <section aria-labelledby="h-data">
       <h2 class="group-label" id="h-data">Your data</h2>
       <div class="group-list">
-        ${row('export', 'download', 'blue', 'Export backup')}
+        ${row('export', 'download', 'blue', 'Export backup', state.prefs.lastBackupAt ? `Last ${esc(sinceText(state.prefs.lastBackupAt))}` : 'Never')}
         ${row('import', 'upload', 'blue', 'Import backup')}
+        ${backup ? row('restore-backup', 'refresh', 'gray', 'Restore previous data', esc(backupLabel(backup))) : ''}
         ${sample ? row('clear-sample', 'x', 'gray', 'Remove sample data') : row('load-sample', 'sparkle', 'violet', 'Load sample data')}
       </div>
       <p class="group-foot">${esc(counts(state))} are saved in this browser on this device. There’s no account and nothing is sent anywhere. Export a backup before clearing browser data or switching devices.</p>
@@ -78,10 +86,12 @@ export function openExport() {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     flash(dlg.querySelector('[data-download]'), 'Download started');
+    store.markBackedUp();
   });
   dlg.querySelector('[data-copy]').addEventListener('click', async () => {
     const ok = await copyText(json, dlg.querySelector('textarea'));
     flash(dlg.querySelector('[data-copy]'), ok ? 'Copied' : 'Text selected. Press Ctrl+C or ⌘C.');
+    if (ok) store.markBackedUp();
   });
 }
 
@@ -145,11 +155,47 @@ export function openImport() {
 export async function confirmReset() {
   const ok = await confirmDialog({
     title: 'Erase all data?',
-    message: `This permanently removes ${esc(counts(store.getState()))} from this device. Example shortcuts will be restored. Export a backup first if you might want them later.`,
+    message: `This removes ${esc(counts(store.getState()))} from this device and restores the example shortcuts. A copy is kept so you can undo, or restore it later from Settings.`,
     confirmLabel: 'Erase everything',
     danger: true,
   });
   if (!ok) return;
   store.resetAll();
-  toast('All data erased');
+  toast('All data erased', { actionLabel: 'Undo', onAction: () => store.restoreBackup(), duration: 8000 });
+}
+
+export async function restorePrevious() {
+  const b = store.readBackup();
+  if (!b) return;
+  const ok = await confirmDialog({
+    title: 'Restore previous data?',
+    message: `${esc(backupLabel(b))}: ${esc(counts(b.data))}. Your current data (${esc(counts(store.getState()))}) is kept as the new backup, so you can switch back.`,
+    confirmLabel: 'Restore',
+  });
+  if (!ok) return;
+  store.restoreBackup();
+  toast('Previous data restored');
+}
+
+// Shows the unreadable copy so it can be saved and recovered.
+export function openRecovery() {
+  const copies = store.unreadableCopies();
+  const raw = copies.length ? copies[copies.length - 1].raw : '';
+  const dlg = openSheet(`${sheetHeader('Recover data')}
+    <div class="sheet-body">
+      <p class="muted">Evenday couldn’t read the data saved in this browser, so it started fresh instead of guessing. Nothing was thrown away: the original is below. Save it, and if it’s a valid backup you can import it from Settings.</p>
+      <div class="setting-actions">
+        <button type="button" class="btn btn-primary" data-copy>${icon('copy')}Copy</button>
+        <button type="button" class="btn btn-secondary" data-download>${icon('download')}Download</button>
+      </div>
+      <label class="sr-only" for="recover-text">Unreadable data</label>
+      <textarea id="recover-text" class="code" rows="6" readonly>${esc(raw)}</textarea>
+    </div>`, { label: 'Recover data' });
+  dlg.querySelector('[data-copy]').addEventListener('click', async () => flash(dlg.querySelector('[data-copy]'), (await copyText(raw, dlg.querySelector('textarea'))) ? 'Copied' : 'Text selected'));
+  dlg.querySelector('[data-download]').addEventListener('click', () => {
+    const url = URL.createObjectURL(new Blob([raw], { type: 'text/plain' }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: 'evenday-unreadable-data.txt' });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
 }

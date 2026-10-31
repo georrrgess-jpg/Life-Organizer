@@ -12,7 +12,7 @@ export function taskGroups(state, today = todayKey()) {
     today: open.filter((t) => t.due === today).sort(byPriority),
     upcoming: open.filter((t) => t.due && t.due > today).sort((a, b) => a.due.localeCompare(b.due) || byPriority(a, b)),
     someday: open.filter((t) => !t.due).sort(byPriority),
-    done: state.tasks.filter((t) => t.done).sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || '')),
+    done: state.tasks.filter((t) => t.done && !t.archived).sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || '')),
   };
 }
 

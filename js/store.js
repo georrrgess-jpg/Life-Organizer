@@ -41,6 +41,8 @@ export function cleanTask(t) {
     goalId: str(t.goalId, 64) || null,
     done: t.done === true,
     completedAt: t.done === true && typeof t.completedAt === 'string' ? t.completedAt : t.done === true ? nowIso() : null,
+    // Cleared from the Done list but kept so goal progress and activity history stay intact.
+    archived: t.done === true && t.archived === true,
     createdAt: typeof t.createdAt === 'string' ? t.createdAt : nowIso(),
     demo: t.demo === true,
   };
@@ -207,6 +209,8 @@ function cleanPrefs(p) {
     today: Object.fromEntries(TODAY_SECTIONS.map((k) => [k, today[k] !== false])),
     onboarded: p.onboarded === true,
     swipeTipSeen: p.swipeTipSeen === true,
+    lastBackupAt: typeof p.lastBackupAt === 'string' ? p.lastBackupAt : null,
+    backupNudgeAfter: typeof p.backupNudgeAfter === 'string' ? p.backupNudgeAfter : null,
     energy: oneOf(p.energy, ['morning', 'afternoon', 'evening'], 'morning'),
     dayStart: isValidTime(p.dayStart) ? p.dayStart : '08:00',
     dayEnd: isValidTime(p.dayEnd) && (!isValidTime(p.dayStart) || toMinutes(p.dayEnd) >= toMinutes(p.dayStart) + 60) ? p.dayEnd : (isValidTime(p.dayStart) && toMinutes(p.dayStart) > 20 * 60 ? '23:59' : '21:00'),
@@ -348,11 +352,11 @@ export function saveTask(data) {
   return task;
 }
 export function setTaskDone(id, done) {
-  state.tasks = state.tasks.map((t) => (t.id === id ? { ...t, done, completedAt: done ? nowIso() : null } : t));
+  state.tasks = state.tasks.map((t) => (t.id === id ? { ...t, done, completedAt: done ? nowIso() : null, archived: false } : t));
   commit();
 }
 export function deleteTask(id) { state.tasks = state.tasks.filter((t) => t.id !== id); commit(); }
-export function clearCompleted() { state.tasks = state.tasks.filter((t) => !t.done); commit(); }
+export function clearCompleted() { state.tasks = state.tasks.map((t) => (t.done ? { ...t, archived: true } : t)); commit(); }
 
 // Events
 export function saveEvent(data) {
@@ -479,8 +483,56 @@ export function clearSampleData(save = true) {
 }
 
 export function resetAll() {
+  writeBackup('erase');
   state = defaults();
   commit();
+}
+
+// ---------- Backups ----------
+
+// Keeps a copy of the current data before a destructive change (erase, import).
+function writeBackup(reason) {
+  write(BACKUP_KEY, JSON.stringify({ reason, savedAt: nowIso(), data: state }));
+}
+
+export function readBackup() {
+  try {
+    const b = JSON.parse(read(BACKUP_KEY));
+    if (!b) return null;
+    // Backups made before this format stored the bare state.
+    const data = b.data || b;
+    return { reason: b.reason || 'import', savedAt: b.savedAt || null, data: fromData(data) };
+  } catch {
+    return null;
+  }
+}
+
+export function restoreBackup() {
+  const b = readBackup();
+  if (!b) return false;
+  const current = state;
+  state = b.data;
+  write(BACKUP_KEY, JSON.stringify({ reason: 'restore', savedAt: nowIso(), data: current }));
+  commit();
+  return true;
+}
+
+export function unreadableCopies() {
+  try {
+    return Object.keys(localStorage).filter((k) => k.startsWith('evenday:unreadable:')).sort().map((k) => ({ key: k, raw: read(k) }));
+  } catch {
+    return [];
+  }
+}
+
+export function markBackedUp() { setPref('lastBackupAt', nowIso()); }
+
+// Ask the browser not to evict our data under storage pressure (best effort).
+let persistAsked = false;
+export async function requestPersistentStorage() {
+  if (persistAsked || !navigator.storage?.persist) return null;
+  persistAsked = true;
+  try { return (await navigator.storage.persisted()) || (await navigator.storage.persist()); } catch { return null; }
 }
 
 // ---------- Export / import ----------
@@ -506,7 +558,7 @@ export function parseImport(text) {
 }
 
 export function applyImport(result) {
-  write(BACKUP_KEY, JSON.stringify(state));
+  writeBackup('import');
   const { skipped, ...data } = result;
   state = structuredClone(data);
   commit();

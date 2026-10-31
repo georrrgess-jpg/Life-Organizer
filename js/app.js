@@ -12,7 +12,7 @@ import { renderToday } from './views/today.js';
 import { renderCalendar, calendarKey } from './views/calendar.js';
 import { expandGroup, renderTasks } from './views/tasks.js';
 import { renderApps } from './views/apps.js';
-import { confirmReset, openExport, openImport, renderSettings } from './views/settings.js';
+import { confirmReset, openExport, openImport, openRecovery, renderSettings, restorePrevious } from './views/settings.js';
 import { carryOver, generatePlan, openBlockSheet, openPlanHours, planDate, renderPlan } from './views/plan.js';
 import { celebrate, openGoalForm, openHabitForm, renderLife } from './views/life.js';
 
@@ -52,6 +52,7 @@ function shell() {
       ${item('tasks')}${item('life')}${item('apps')}${item('preferences')}
     </nav>
     <main id="main" tabindex="-1"></main>
+    <div id="load-warning" class="banner" role="alert" hidden>${icon('alert')}<span>Your saved data couldn’t be read, so Evenday started fresh. A copy was kept safely.</span><button type="button" class="btn btn-secondary btn-sm" data-action="recover-data">Recover</button></div>
     <div id="storage-warning" class="banner" role="alert" hidden>${icon('alert')}<span>This browser isn’t saving data (private mode or storage is blocked). Changes will be lost when you close the page.</span></div>`;
   main = document.getElementById('main');
 }
@@ -73,6 +74,7 @@ function render() {
     else a.removeAttribute('aria-current');
   });
   document.getElementById('storage-warning').hidden = store.isStorageOk();
+  document.getElementById('load-warning').hidden = !store.hadLoadError() || ui.loadWarningDismissed;
   applyTheme();
   if (draft && main.querySelector('.quick-task input')) main.querySelector('.quick-task input').value = draft;
   if (focusKey) main.querySelector(`[data-focus="${focusKey}"]`)?.focus({ preventScroll: true });
@@ -122,14 +124,18 @@ function toggleTask(btn) {
   const task = store.getState().tasks.find((t) => t.id === id);
   if (!task) return;
   const done = !task.done;
-  const snap = store.snapshot();
+  if (btn.dataset.pending) return; // already animating towards done
   const finish = () => {
+    delete btn.dataset.pending;
+    // Snapshot right before the change, so Undo restores exactly this step.
+    const snap = store.snapshot();
     store.setTaskDone(id, done);
     toast(done ? `Completed “${task.title}”` : `Reopened “${task.title}”`, { actionLabel: 'Undo', onAction: () => store.restore(snap) });
   };
   if (done && !reducedMotion()) {
     btn.closest('.task-row, .tl-item')?.classList.add('completing');
     btn.setAttribute('aria-checked', 'true');
+    btn.dataset.pending = '1';
     setTimeout(finish, 420);
   } else finish();
 }
@@ -157,7 +163,8 @@ const actions = {
   'plan-day': (el) => { ui.planDay = el.dataset.day; ui.fresh = true; render(); },
   'plan-energy': (el) => store.setPref('energy', el.dataset.value),
   'plan-hours': openPlanHours,
-  'plan-generate': () => {
+  'plan-generate': (el) => {
+    if (el?.dataset.day) ui.planDay = el.dataset.day;
     const date = planDate(ui);
     const r = generatePlan(date);
     ui.fresh = true;
@@ -201,6 +208,11 @@ const actions = {
   'open-themes': openThemeSheet,
   'open-today-custom': openTodaySheet,
   'dismiss-swipe-tip': () => store.setPref('swipeTipSeen', true),
+  'backup-later': () => {
+    const d = new Date(); d.setDate(d.getDate() + 7);
+    store.setPref('backupNudgeAfter', d.toISOString());
+  },
+  'recover-data': openRecovery,
   'go-back': () => { location.hash = ui.prevRoute && ui.prevRoute !== 'preferences' ? ui.prevRoute : 'today'; },
   'move-overdue': () => {
     const today = todayKey();
@@ -220,8 +232,8 @@ const actions = {
   'tasks-more': (el) => { expandGroup(el.dataset.key); render(); },
   'task-tab': (el) => { ui.taskTab = el.dataset.tab; render(); },
   'clear-completed': async () => {
-    const n = store.getState().tasks.filter((t) => t.done).length;
-    if (!await confirmDialog({ title: 'Clear completed tasks?', message: `${n} completed task${n > 1 ? 's' : ''} will be deleted.`, confirmLabel: 'Clear', danger: true })) return;
+    const n = store.getState().tasks.filter((t) => t.done && !t.archived).length;
+    if (!await confirmDialog({ title: 'Clear completed tasks?', message: `${n} completed task${n > 1 ? 's' : ''} will be hidden from this list. Goal progress and your activity history are kept.`, confirmLabel: 'Clear' })) return;
     const snap = store.snapshot();
     store.clearCompleted();
     toast('Completed tasks cleared', { actionLabel: 'Undo', onAction: () => store.restore(snap) });
@@ -242,6 +254,7 @@ const actions = {
   export: openExport,
   import: openImport,
   reset: confirmReset,
+  'restore-backup': restorePrevious,
   'load-sample': () => { store.loadSampleData(); toast('Sample data loaded', { actionLabel: 'Remove', onAction: () => store.clearSampleData() }); },
   'clear-sample': () => { const snap = store.snapshot(); store.clearSampleData(); toast('Sample data removed', { actionLabel: 'Undo', onAction: () => store.restore(snap) }); },
 };
@@ -365,7 +378,8 @@ function start() {
   store.load();
   shell();
   bindEvents();
-  store.subscribe(() => { onDataChange(); render(); });
+  store.subscribe(() => { onDataChange(); render(); store.requestPersistentStorage(); });
+  if (!store.isFirstRun()) store.requestPersistentStorage();
   route();
   if (store.isFirstRun() && !store.getState().prefs.onboarded) openWelcome();
   if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !location.hostname.endsWith('claude.ai')) {

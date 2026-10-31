@@ -56,6 +56,7 @@ export function renderToday(state) {
     <button type="button" class="btn btn-secondary btn-sm" data-action="load-sample">Load sample data</button>
   </div>` : ''}
 
+  ${backupNudge(state)}
   ${show.plan ? planCard(state, today, nowMin) : ''}
 
   ${show.upNext && next ? `<button type="button" class="up-next" data-action="view-event" data-id="${next.id}">
@@ -114,6 +115,19 @@ export function renderToday(state) {
 
 const eventTime = (e) => `${formatTime(e.start)} – ${formatTime(e.end)}`;
 
+// A gentle reminder when there's real data and no recent backup.
+function backupNudge(state) {
+  const items = state.tasks.length + state.events.length + state.habits.length + state.goals.length;
+  if (items < 10 || state.tasks.every((t) => t.demo)) return '';
+  const now = new Date();
+  const last = state.prefs.lastBackupAt ? new Date(state.prefs.lastBackupAt) : null;
+  if (last && now - last < 14 * 864e5) return '';
+  if (state.prefs.backupNudgeAfter && now < new Date(state.prefs.backupNudgeAfter)) return '';
+  return `<div class="tip">${icon('download')}<span>${last ? 'It’s been a while since your last backup.' : 'Your data lives only on this device.'} Save a backup so nothing gets lost.</span>
+    <button type="button" class="btn btn-secondary btn-sm" data-action="export">Back up</button>
+    <button type="button" class="btn-icon btn-sm" data-action="backup-later" aria-label="Remind me next week">${icon('x')}</button></div>`;
+}
+
 // Today's plan at a glance, or an invitation to make one.
 function planCard(state, today, nowMin) {
   const plan = state.plans[today];
@@ -126,7 +140,7 @@ function planCard(state, today, nowMin) {
       <span class="plan-cta-icon">${icon('wand')}</span>
       <div><p class="plan-cta-title">Plan my day</p>
       <p class="plan-cta-text">${p.blocks.length ? `${p.blocks.length} of ${ready.length} task${ready.length === 1 ? '' : 's'} fit in ${formatDuration(p.plannedMinutes)} around your events` : 'No free time left today. Plan tomorrow instead?'}</p></div>
-      <button type="button" class="btn btn-primary btn-sm" data-action="plan-generate">Plan</button>
+      <button type="button" class="btn btn-primary btn-sm" data-action="plan-generate" data-day="${p.blocks.length ? 'today' : 'tomorrow'}">${p.blocks.length ? 'Plan' : 'Plan tomorrow'}</button>
     </section>`;
   }
   const blocks = plan.blocks.filter((b) => byId[b.taskId]);

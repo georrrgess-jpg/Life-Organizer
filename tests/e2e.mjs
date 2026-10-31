@@ -307,6 +307,18 @@ await step('Plan: complete a block, change its length, lock it, move one to tomo
   assert.equal(b.locked, true);
   await page.click('[data-action="plan-generate"] >> nth=0');
   assert.equal((await state()).plans[today].blocks.find((x) => x.taskId === bank).start, b.start, 'locked block kept its time');
+  // A new event over the locked block: "Fix" re-places it.
+  await page.evaluate(([d, st, en]) => {
+    const data = JSON.parse(localStorage.getItem('evenday:data:v1'));
+    data.events.push({ id: 'clash1', title: 'Surprise call', date: d, allDay: false, start: st, end: en });
+    localStorage.setItem('evenday:data:v1', JSON.stringify(data));
+  }, [today, b.start, b.end]);
+  await page.reload();
+  await page.waitForSelector('.tip-warn');
+  await page.click('.tip-warn [data-action="plan-generate"]');
+  const moved = (await state()).plans[today].blocks.find((x) => x.taskId === bank);
+  assert.notEqual(moved.start, b.start, 'clashing locked block moved');
+  assert.equal(await page.locator('.tip-warn').count(), 0);
   const report = (await state()).tasks.find((x) => x.title === 'Write report').id;
   await page.click(`[data-action="plan-block"][data-id="${report}"]`);
   await page.click('dialog [data-do="tomorrow"]');
@@ -387,6 +399,47 @@ await step('Quick add offers new habit and goal forms', async () => {
   await page.waitForSelector('dialog', { state: 'detached' });
 });
 
+await step('Undo after two quick completions only reverts the last one', async () => {
+  await go('tasks');
+  for (const t of ['Quick one', 'Quick two']) { await page.fill('#quick-tasks', t); await page.press('#quick-tasks', 'Enter'); }
+  const ids = (await state()).tasks.filter((x) => x.title.startsWith('Quick ')).map((x) => x.id);
+  await page.evaluate((list) => list.forEach((id) => document.querySelector(`[data-action="toggle-task"][data-id="${id}"]`).click()), ids);
+  await page.waitForTimeout(700);
+  await page.click('.toast-action');
+  const s = await state();
+  assert.equal(s.tasks.find((x) => x.id === ids[0]).done, true, 'first stays done');
+  assert.equal(s.tasks.find((x) => x.id === ids[1]).done, false, 'second undone');
+});
+
+await step('Clear completed keeps history for goals and activity', async () => {
+  await go('life');
+  const before = await page.textContent('.heat-foot');
+  await go('tasks');
+  await page.click('[data-tab="done"]');
+  await page.click('[data-action="clear-completed"]');
+  await page.click('dialog [data-confirm]');
+  await page.waitForSelector('dialog', { state: 'detached' });
+  const s = await state();
+  assert.ok(s.tasks.some((t) => t.done && t.archived), 'archived, not deleted');
+  assert.equal(await page.locator('.task-row').count(), 0, 'hidden from Done');
+  await go('life');
+  assert.equal(await page.textContent('.heat-foot'), before, 'activity unchanged');
+  await page.locator('[data-goal]', { hasText: 'Launch portfolio' }).waitFor();
+});
+
+await step('Editor rows are never squashed in tall sheets (desktop)', async () => {
+  await page.setViewportSize({ width: 1280, height: 700 });
+  await go('tasks');
+  await page.click('[data-tab="today"]');
+  await page.click('.task-main >> nth=0');
+  await page.waitForSelector('dialog[open] [data-delete]');
+  const h = await page.evaluate(() => document.querySelector('dialog [data-delete]').getBoundingClientRect().height);
+  assert.ok(h >= 44, `delete row height ${h}`);
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('dialog', { state: 'detached' });
+  await page.setViewportSize({ width: 390, height: 844 });
+});
+
 await step('Data persists after reload', async () => {
   await go('today');
   await page.reload();
@@ -464,6 +517,9 @@ await step('Themes: preset, accent, true black, font, size, corners, density app
   await page.click('[data-action="open-themes"]');
   await page.click('dialog [data-reset-look]');
   assert.equal((await state()).prefs.preset, 'evenday');
+  await page.click('.toast-action'); // toast sits above the open sheet and stays clickable
+  assert.equal((await state()).prefs.accent, 'pink', 'undo from toast over a sheet');
+  await page.click('dialog [data-reset-look]');
   await page.keyboard.press('Escape');
   await page.click('[data-action="set-theme"][data-value="system"]');
 });
@@ -534,6 +590,20 @@ await step('Reset requires confirmation and erases data', async () => {
   await page.click('[data-action="reset"]');
   await page.click('dialog [data-confirm]');
   await page.waitForSelector('dialog', { state: 'detached' });
+  assert.equal((await state()).tasks.length, 0);
+  await page.click('.toast-action');
+  assert.equal((await state()).tasks.length, ownTasks, 'Undo brings everything back');
+  await page.click('[data-action="reset"]');
+  await page.click('dialog [data-confirm]');
+  await page.waitForSelector('dialog', { state: 'detached' });
+  await page.waitForTimeout(250);
+  await page.click('[data-action="restore-backup"]');
+  await page.click('dialog [data-confirm]');
+  await page.waitForSelector('dialog', { state: 'detached' });
+  assert.equal((await state()).tasks.length, ownTasks, 'Restore previous works');
+  await page.click('[data-action="reset"]');
+  await page.click('dialog [data-confirm]');
+  await page.waitForSelector('dialog', { state: 'detached' });
   const s = await state();
   assert.equal(s.tasks.length + s.events.length, 0);
 });
@@ -579,6 +649,9 @@ await step('Unreadable saved data is kept, not overwritten', async () => {
   await p3.waitForSelector('.page');
   const kept = await p3.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('evenday:unreadable:')).map((k) => localStorage.getItem(k)));
   assert.deepEqual(kept, ['{broken json']);
+  await p3.waitForSelector('#load-warning:not([hidden])');
+  await p3.click('#load-warning [data-action="recover-data"]');
+  assert.equal(await p3.inputValue('#recover-text'), '{broken json');
   await p3.close();
 });
 
